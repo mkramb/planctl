@@ -12,8 +12,7 @@ errors, external process execution, and an offline integration harness with real
 Git and a stateful fake review provider. Lifecycle commands are next; they are
 not yet available.
 
-See the [implementation milestones](docs/implementation-plan.md) and
-[architecture decisions](docs/architecture.md).
+See [architecture](docs/architecture.md) for design decisions.
 
 ## Development
 
