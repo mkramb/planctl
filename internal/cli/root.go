@@ -132,10 +132,10 @@ func classifyError(err error) (output.ErrorDetail, int) {
 	var configErr *config.Error
 	var planErr *plan.Error
 	if errors.As(err, &planErr) {
-		return output.ErrorDetail{Code: planErr.Code, Message: planErr.Message}, 1
+		return output.ErrorDetail{Code: planErr.Code, Message: withCause(planErr.Message, planErr.Cause)}, 1
 	}
 	if errors.As(err, &configErr) {
-		return output.ErrorDetail{Code: configErr.Code, Message: configErr.Message}, 1
+		return output.ErrorDetail{Code: configErr.Code, Message: withCause(configErr.Message, configErr.Cause)}, 1
 	}
 	if errors.Is(err, git.ErrNotRepository) {
 		return output.ErrorDetail{Code: "not_git_repository", Message: "not inside a Git working tree; initialize a repository with git init first"}, 1
@@ -151,6 +151,15 @@ func classifyError(err error) (output.ErrorDetail, int) {
 		}
 	}
 	return output.ErrorDetail{Code: "operation_failed", Message: err.Error()}, 1
+}
+
+// withCause appends an underlying error's detail so failures are diagnosable
+// without swallowing the higher-level context.
+func withCause(message string, cause error) string {
+	if cause == nil {
+		return message
+	}
+	return message + ": " + cause.Error()
 }
 
 // Cobra may reject an argument before it parses a trailing --json. Detect the

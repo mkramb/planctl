@@ -52,9 +52,10 @@ through GitHub's normal review flow.
 
 ### Plan mode
 
-You don't have to be in plan mode or know anything about `planctl`. It works in a
-normal OpenCode session. (OpenCode's built-in plan agent is a different, separate
-feature; planctl uses its own skill and doesn't depend on it.)
+Use planctl in a normal session, not OpenCode's plan mode. `planctl create` and
+`planctl publish` write to disk (they create a worktree, push a branch, and open
+a PR), so they're blocked while plan mode is read-only. If you're in plan mode,
+switch out of it before the agent runs `planctl review`.
 
 If you ever want to drive it yourself, a `/planctl` command is installed:
 
