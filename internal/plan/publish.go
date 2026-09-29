@@ -37,15 +37,8 @@ func (s Service) Publish(ctx context.Context, req PublishRequest) (Publication, 
 	if err != nil {
 		return Publication{}, err
 	}
-	remote, err := selected.client.Origin(ctx)
-	if err != nil {
-		return Publication{}, &Error{Code: "invalid_remote", Message: "configure origin with the same single fetch and push URL before publishing", Cause: err}
-	}
-	repository, err := s.Provider.ResolveRepository(ctx, remote)
-	if err != nil {
-		return Publication{}, &Error{Code: "repository_lookup_failed", Message: "could not resolve origin's review repository", Cause: err}
-	}
-	metadata := Metadata{Version: 1, ID: p.ID, ImplementationRepository: repository}
+	repository := selected.plansRepo
+	metadata := Metadata{Version: 1, ID: p.ID, ImplementationRepository: selected.implRepo}
 	lookup := review.FindRequest{Repository: repository, HeadBranch: p.Branch}
 	// Reject terminal or unrelated reviews before committing or pushing anything.
 	if _, err := s.findPublishable(ctx, lookup, metadata, p.Base); err != nil && !errors.Is(err, review.ErrNotFound) {

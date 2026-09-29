@@ -3,7 +3,6 @@ package plan
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 
 	"github.com/mkramb/planctl/internal/git"
@@ -93,28 +92,21 @@ func (s Service) completeTerminal(ctx context.Context, req PublishRequest, prune
 	if err != nil {
 		return Completion{}, err
 	}
-	if loaded.Config.Repositories.Plans != "current" {
-		return Completion{}, &Error{Code: "dedicated_repository_unavailable", Message: "dedicated plans repositories are not implemented yet"}
+	t, err := s.resolveTarget(ctx, loaded, true)
+	if err != nil {
+		return Completion{}, err
 	}
-	client := git.New(s.Executor, loaded.RepositoryRoot, s.Env)
-	branch := strings.ReplaceAll(loaded.Config.Branch.Pattern, "{slug}", req.PlanID)
+	client := t.plans
+	branch := t.branchFor(loaded.Config.Branch.Pattern, req.PlanID)
 	base, _, err := resolveBase(ctx, client, loaded.Config.Branch.Base)
 	if err != nil {
 		return Completion{}, err
 	}
-	remote, err := client.Origin(ctx)
-	if err != nil {
-		return Completion{}, &Error{Code: "invalid_remote", Message: "configure origin before completing", Cause: err}
-	}
-	repository, err := s.Provider.ResolveRepository(ctx, remote)
-	if err != nil {
-		return Completion{}, &Error{Code: "repository_lookup_failed", Message: "could not resolve origin's review repository", Cause: err}
-	}
-	found, err := s.Provider.FindReview(ctx, review.FindRequest{Repository: repository, HeadBranch: branch})
+	found, err := s.Provider.FindReview(ctx, review.FindRequest{Repository: t.plansRepo, HeadBranch: branch})
 	if err != nil {
 		return Completion{}, &Error{Code: "workspace_missing", Message: "plan has no available managed worktree; create the plan or repair its worktree first"}
 	}
-	if err := validateIdentity(found, repository, branch, Metadata{Version: 1, ID: req.PlanID, ImplementationRepository: repository}, base); err != nil {
+	if err := validateIdentity(found, t.plansRepo, branch, Metadata{Version: 1, ID: req.PlanID, ImplementationRepository: t.implRepo}, base); err != nil {
 		return Completion{}, err
 	}
 	expected := review.Closed
@@ -126,7 +118,7 @@ func (s Service) completeTerminal(ctx context.Context, req PublishRequest, prune
 	}
 	p := Plan{
 		ID: req.PlanID, Title: req.PlanID, Branch: branch, Base: base,
-		Path: filepath.ToSlash(filepath.Join(loaded.Config.Plan.Directory, req.PlanID+".md")),
+		Path: t.pathFor(loaded.Config.Plan.Directory, req.PlanID),
 	}
 	completion := Completion{Plan: p, Review: found, Retention: loaded.Config.Plan.Retention, WorkspaceRemoved: true}
 	if pruneRemote {

@@ -30,8 +30,8 @@ func newPublish(deps Dependencies, opts *options) *cobra.Command {
 			return (output.Renderer{Stdout: deps.Stdout, Stderr: deps.Stderr, JSON: opts.json}).Publish(output.PublishResult{
 				Version: output.Version, Plan: published.Plan, Commit: published.Commit,
 				Review: output.ReviewResult{
-					ID: published.Review.Ref.ID, Provider: published.Review.Ref.Provider, URL: published.Review.URL,
-					State: published.Review.State, Draft: published.Review.Draft,
+					ID: published.Review.Ref.ID, Provider: published.Review.Ref.Provider, Repository: published.Review.Ref.Repository,
+					URL: published.Review.URL, State: published.Review.State, Draft: published.Review.Draft,
 				},
 			})
 		},

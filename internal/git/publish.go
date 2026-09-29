@@ -28,6 +28,11 @@ func (c *Client) Origin(ctx context.Context) (string, error) {
 	return fetch, nil
 }
 
+// RemoteURL returns a named remote's URL without the fetch/push consistency check.
+func (c *Client) RemoteURL(ctx context.Context, name string) (string, error) {
+	return c.value(ctx, "remote", "get-url", name)
+}
+
 func (c *Client) ChangedFiles(ctx context.Context, base, head string) ([]string, error) {
 	result, err := c.Run(ctx, "diff", "--name-only", "--no-renames", "-z", base+"..."+head, "--")
 	return splitPaths(result.Stdout), err

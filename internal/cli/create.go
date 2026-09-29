@@ -17,7 +17,7 @@ func newCreate(deps Dependencies, opts *options) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service := plan.Service{Executor: deps.Executor, Env: deps.Env, CacheDir: deps.CacheDir}
+			service := plan.Service{Executor: deps.Executor, Env: deps.Env, CacheDir: deps.CacheDir, Provider: deps.Provider}
 			created, err := service.Create(cmd.Context(), plan.CreateRequest{
 				Dir: deps.Dir, ConfigPath: opts.config, Title: args[0],
 			})

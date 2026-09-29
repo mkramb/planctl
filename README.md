@@ -7,10 +7,11 @@ Git provides history. GitHub provides collaboration. `planctl` connects them.
 
 ## Development status
 
-V1 is being built incrementally. `init`, `create`, `publish`, `status`,
-`feedback`, `context`, and `complete` are implemented. The GitHub adapter is
-wired and covered by fixture tests; it has not yet been exercised against live
-GitHub. Dedicated plans repositories and agent skills are next.
+V1 is being built incrementally. All lifecycle commands are implemented:
+`init`, `create`, `publish`, `status`, `feedback`, `context`, and `complete`,
+including dedicated plans repositories. The GitHub adapter is wired and covered
+by fixture tests; it has not yet been exercised against live GitHub. Agent
+skills are next.
 
 See [architecture](docs/architecture.md) for design decisions.
 

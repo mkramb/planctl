@@ -40,11 +40,12 @@ type CreateResult struct {
 }
 
 type ReviewResult struct {
-	ID       string       `json:"id"`
-	Provider string       `json:"provider"`
-	URL      string       `json:"url"`
-	State    review.State `json:"state"`
-	Draft    bool         `json:"draft"`
+	ID         string       `json:"id"`
+	Provider   string       `json:"provider"`
+	Repository string       `json:"repository"`
+	URL        string       `json:"url"`
+	State      review.State `json:"state"`
+	Draft      bool         `json:"draft"`
 }
 
 type PublishResult struct {
@@ -132,7 +133,7 @@ func NewCompleteResult(c plan.Completion) CompleteResult {
 			ID: c.Plan.ID, Title: c.Plan.Title, Path: c.Plan.Path, Status: statusForState(c.Review.State),
 			WorkspacePath: c.Plan.WorkspacePath, AbsolutePath: c.Plan.AbsolutePath,
 		},
-		Review:           ReviewResult{ID: c.Review.Ref.ID, Provider: c.Review.Ref.Provider, URL: c.Review.URL, State: c.Review.State, Draft: c.Review.Draft},
+		Review:           ReviewResult{ID: c.Review.Ref.ID, Provider: c.Review.Ref.Provider, Repository: c.Review.Ref.Repository, URL: c.Review.URL, State: c.Review.State, Draft: c.Review.Draft},
 		Retention:        c.Retention,
 		PrunedRemote:     c.PrunedRemote,
 		WorkspaceRemoved: c.WorkspaceRemoved,
@@ -155,7 +156,7 @@ func reviewResult(eval plan.Evaluation) *ReviewResult {
 		return nil
 	}
 	return &ReviewResult{
-		ID: eval.Review.Ref.ID, Provider: eval.Review.Ref.Provider, URL: eval.Review.URL,
+		ID: eval.Review.Ref.ID, Provider: eval.Review.Ref.Provider, Repository: eval.Review.Ref.Repository, URL: eval.Review.URL,
 		State: eval.Review.State, Draft: eval.Review.Draft,
 	}
 }

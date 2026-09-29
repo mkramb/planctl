@@ -22,6 +22,9 @@ type selection struct {
 	config     config.Loaded
 	client     *git.Client
 	baseCommit string
+	implRepo   string
+	plansRepo  string
+	dedicated  bool
 }
 
 func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, error) {
@@ -29,10 +32,11 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, er
 	if err != nil {
 		return selection{}, err
 	}
-	if loaded.Config.Repositories.Plans != "current" {
-		return selection{}, &Error{Code: "dedicated_repository_unavailable", Message: "dedicated plans repositories are not implemented yet"}
+	t, err := s.resolveTarget(ctx, loaded, true)
+	if err != nil {
+		return selection{}, err
 	}
-	client := git.New(s.Executor, loaded.RepositoryRoot, s.Env)
+	client := t.plans
 	root, err := s.workspaceRoot(ctx, client)
 	if err != nil {
 		return selection{}, err
@@ -54,7 +58,7 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, er
 			if err != nil {
 				return selection{}, err
 			}
-			id = branchID(pattern, branch)
+			id = t.branchID(pattern, branch)
 		}
 	}
 	if id == "" {
@@ -64,7 +68,7 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, er
 		}
 		var candidates []string
 		for _, branch := range branches {
-			if slug := branchID(pattern, branch); slug != "" {
+			if slug := t.branchID(pattern, branch); slug != "" {
 				candidates = append(candidates, slug)
 			}
 		}
@@ -78,8 +82,8 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, er
 		}
 	}
 	p := Plan{
-		ID: id, Branch: strings.ReplaceAll(pattern, "{slug}", id),
-		Path:          filepath.ToSlash(filepath.Join(loaded.Config.Plan.Directory, id+".md")),
+		ID: id, Branch: t.branchFor(pattern, id),
+		Path:          t.pathFor(loaded.Config.Plan.Directory, id),
 		WorkspacePath: filepath.Join(root, id),
 	}
 	p.AbsolutePath = filepath.Join(p.WorkspacePath, filepath.FromSlash(p.Path))
@@ -105,19 +109,10 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, er
 		return selection{}, err
 	}
 	p.Base = base
-	return selection{plan: p, config: loaded, client: client, baseCommit: baseCommit}, nil
-}
-
-func branchID(pattern, branch string) string {
-	prefix, suffix, _ := strings.Cut(pattern, "{slug}")
-	if !strings.HasPrefix(branch, prefix) || !strings.HasSuffix(branch, suffix) || len(branch) < len(prefix)+len(suffix) {
-		return ""
-	}
-	id := branch[len(prefix) : len(branch)-len(suffix)]
-	if !validID(id) {
-		return ""
-	}
-	return id
+	return selection{
+		plan: p, config: loaded, client: client, baseCommit: baseCommit,
+		implRepo: t.implRepo, plansRepo: t.plansRepo, dedicated: t.dedicated,
+	}, nil
 }
 
 func validID(id string) bool {

@@ -20,6 +20,7 @@ type MockReviewProvider struct {
 	feedback        map[review.Ref][]review.Feedback
 	remoteIDs       map[string]string
 	repositories    map[string]*git.Client
+	plansRemotes    map[string]string
 	createFailure   error
 	failAfterCreate bool
 	lookupFailure   error
@@ -31,6 +32,7 @@ func NewMockReviewProvider() *MockReviewProvider {
 	return &MockReviewProvider{
 		reviews: make(map[review.Ref]review.Review), feedback: make(map[review.Ref][]review.Feedback),
 		remoteIDs: make(map[string]string), repositories: make(map[string]*git.Client),
+		plansRemotes: make(map[string]string),
 	}
 }
 
@@ -55,6 +57,29 @@ func (p *MockReviewProvider) ResolveRepository(ctx context.Context, remote strin
 		return "", review.ErrRepositoryNotFound
 	}
 	return id, nil
+}
+
+// RegisterPlansRemote maps a plans repository name to its local bare remote so
+// dedicated-repository integration tests can clone and review without network.
+func (p *MockReviewProvider) RegisterPlansRemote(name, remote string, env []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.plansRemotes[name] = remote
+	p.remoteIDs[remote] = name
+	p.repositories[name] = git.New(process.Runner{}, remote, env)
+}
+
+func (p *MockReviewProvider) ResolvePlansRepository(ctx context.Context, name string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	remote, ok := p.plansRemotes[name]
+	if !ok {
+		return "", review.ErrRepositoryNotFound
+	}
+	return remote, nil
 }
 
 func (p *MockReviewProvider) CreateReview(ctx context.Context, req review.CreateRequest) (review.Review, error) {

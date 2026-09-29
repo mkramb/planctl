@@ -22,15 +22,8 @@ func (s Service) Inspect(ctx context.Context, req PublishRequest) (Evaluation, e
 	if err != nil {
 		return Evaluation{}, err
 	}
-	remote, err := selected.client.Origin(ctx)
-	if err != nil {
-		return Evaluation{}, &Error{Code: "invalid_remote", Message: "configure origin with the same single fetch and push URL", Cause: err}
-	}
-	repository, err := s.Provider.ResolveRepository(ctx, remote)
-	if err != nil {
-		return Evaluation{}, &Error{Code: "repository_lookup_failed", Message: "could not resolve origin's review repository", Cause: err}
-	}
-	want := Metadata{Version: 1, ID: p.ID, ImplementationRepository: repository}
+	repository := selected.plansRepo
+	want := Metadata{Version: 1, ID: p.ID, ImplementationRepository: selected.implRepo}
 	var found *review.Review
 	r, err := s.Provider.FindReview(ctx, review.FindRequest{Repository: repository, HeadBranch: p.Branch})
 	if err != nil && !errors.Is(err, review.ErrNotFound) {
@@ -63,7 +56,7 @@ func (s Service) Inspect(ctx context.Context, req PublishRequest) (Evaluation, e
 		return Evaluation{}, err
 	}
 	return Evaluate(EvaluationInput{
-		Plan: p, Repository: repository, PlansRepository: repository,
+		Plan: p, Repository: selected.implRepo, PlansRepository: selected.plansRepo,
 		Review: found, Feedback: feedback,
 		RequiredApprovals: selected.config.Config.Review.RequiredApprovals,
 		LocalCommit:       localCommit, LocalDirty: dirty,

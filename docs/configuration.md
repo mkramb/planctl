@@ -54,11 +54,33 @@ branch. The base must have a commit; fetch it first if needed.
 
 - `required_approvals` must be a positive integer.
 - `repositories.plans` accepts `current` or `owner/repository`.
+
+### Dedicated plans repository
+
+Point plans at a separate repository:
+
+```yaml
+repositories:
+  plans: acme/engineering-plans
+```
+
+`planctl` clones that repository into its local cache and creates plan worktrees
+there. Plan branches and paths are namespaced by implementation repository so
+multiple repositories can share one plans repository:
+
+```text
+plan/{implementation-owner}/{implementation-repo}/{slug}
+.plans/{implementation-owner}/{implementation-repo}/{slug}.md
+```
+
+Reviews are created in the plans repository. The implementation repository name
+is recorded in review metadata. Run commands from the implementation checkout;
+`planctl` manages the plans clone automatically.
 - `retention` accepts `pr-only` or `repository`.
 - `directory` must stay inside the repository, outside `.git`.
 - Unknown fields and unsupported versions/providers are errors.
 - Configuration holds settings, not review IDs or current plan status.
 
-`init` and same-repository `create` are available. Publishing is tested through
-the fake provider. The GitHub adapter, dedicated plans repositories, and completion
-arrive in later stages.
+`init`, same-repository `create`, and dedicated plans repositories are available.
+The GitHub adapter, publishing, review lifecycle, and completion are implemented
+and covered by offline tests; live GitHub verification remains.

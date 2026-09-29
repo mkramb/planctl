@@ -41,11 +41,12 @@ func (s Service) Create(ctx context.Context, req CreateRequest) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	if loaded.Config.Repositories.Plans != "current" {
-		return Plan{}, &Error{Code: "dedicated_repository_unavailable", Message: "dedicated plans repositories are not implemented yet; use repositories.plans: current"}
+	t, err := s.resolveTarget(ctx, loaded, loaded.Config.Repositories.Plans != "current")
+	if err != nil {
+		return Plan{}, err
 	}
-	client := git.New(s.Executor, loaded.RepositoryRoot, s.Env)
-	branch := strings.ReplaceAll(loaded.Config.Branch.Pattern, "{slug}", slug)
+	client := t.plans
+	branch := t.branchFor(loaded.Config.Branch.Pattern, slug)
 	if err := client.CheckBranch(ctx, branch); err != nil {
 		return Plan{}, &Error{Code: "invalid_branch", Message: "branch pattern and title do not produce a valid Git branch name", Cause: err}
 	}
@@ -70,7 +71,7 @@ func (s Service) Create(ctx context.Context, req CreateRequest) (Plan, error) {
 	}
 	p := Plan{
 		ID: slug, Title: title, Branch: branch, Base: base,
-		Path:          filepath.ToSlash(filepath.Join(loaded.Config.Plan.Directory, slug+".md")),
+		Path:          t.pathFor(loaded.Config.Plan.Directory, slug),
 		WorkspacePath: filepath.Join(workspaceRoot, slug),
 	}
 	p.AbsolutePath = filepath.Join(p.WorkspacePath, filepath.FromSlash(p.Path))

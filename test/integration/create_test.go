@@ -231,7 +231,7 @@ func TestCreateErrors(t *testing.T) {
 	assertConfigFailure(t, env.Run(t, "create", "--json"), "invalid_arguments")
 	assertConfigFailure(t, env.Run(t, "create", "Add", "SSO", "--json"), "invalid_arguments")
 	env.WriteFile(t, ".planctl.yaml", "version: 1\nrepositories:\n  plans: acme/plans\n")
-	assertConfigFailure(t, env.Run(t, "create", "Add SSO", "--json"), "dedicated_repository_unavailable")
+	assertConfigFailure(t, env.Run(t, "create", "Add SSO", "--json"), "repository_lookup_failed")
 	worktrees, err := env.Git.Worktrees(t.Context())
 	require.NoError(t, err)
 	assert.Len(t, worktrees, 1)

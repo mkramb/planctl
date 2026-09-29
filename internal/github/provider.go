@@ -48,6 +48,10 @@ func (p *Provider) ResolveRepository(ctx context.Context, remote string) (string
 	return repo.NameWithOwner, nil
 }
 
+func (p *Provider) ResolvePlansRepository(ctx context.Context, name string) (string, error) {
+	return "https://github.com/" + name + ".git", nil
+}
+
 func (p *Provider) CreateReview(ctx context.Context, req review.CreateRequest) (review.Review, error) {
 	args := []string{
 		"pr", "create", "--repo", req.Repository,

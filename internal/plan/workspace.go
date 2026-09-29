@@ -22,12 +22,9 @@ func (s Service) workspaceRoot(ctx context.Context, client *git.Client) (string,
 	if err != nil {
 		return "", err
 	}
-	cache := s.CacheDir
-	if cache == "" {
-		cache, err = os.UserCacheDir()
-		if err != nil {
-			return "", err
-		}
+	cache, err := s.cacheDir()
+	if err != nil {
+		return "", err
 	}
 	cache, err = canonicalFuturePath(cache)
 	if err != nil {

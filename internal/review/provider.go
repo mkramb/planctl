@@ -84,6 +84,9 @@ type FindRequest struct {
 // Provider is deliberately small. Completion operations will be added when used.
 type Provider interface {
 	ResolveRepository(context.Context, string) (string, error)
+	// ResolvePlansRepository maps a configured plans repository name to a clone
+	// URL (GitHub) or a local path (tests).
+	ResolvePlansRepository(context.Context, string) (string, error)
 	CreateReview(context.Context, CreateRequest) (Review, error)
 	FindReview(context.Context, FindRequest) (Review, error)
 	GetReview(context.Context, Ref) (Review, error)
