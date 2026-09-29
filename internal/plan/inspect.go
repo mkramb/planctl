@@ -10,7 +10,7 @@ import (
 // Inspect gathers everything status, feedback, and context need in one pass.
 func (s Service) Inspect(ctx context.Context, req PublishRequest) (Evaluation, error) {
 	if s.Provider == nil {
-		return Evaluation{}, &Error{Code: "provider_unavailable", Message: "GitHub integration is not implemented yet; lifecycle commands work through the integration-test provider only"}
+		return Evaluation{}, &Error{Code: "provider_unavailable", Message: "no review provider configured"}
 	}
 	sub, err := s.resolve(ctx, req)
 	if err != nil {
@@ -54,7 +54,6 @@ func (s Service) Inspect(ctx context.Context, req PublishRequest) (Evaluation, e
 		}
 	}
 	return Evaluate(EvaluationInput{
-		Plan: p, Repository: repository, Review: found, Feedback: feedback,
-		Reviewers: reviewers, LocalDirty: localDirty,
+		Plan: p, Review: found, Feedback: feedback, Reviewers: reviewers, LocalDirty: localDirty,
 	}), nil
 }

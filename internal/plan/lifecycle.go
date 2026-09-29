@@ -17,7 +17,6 @@ const (
 
 type Evaluation struct {
 	Plan              Plan
-	Repository        string
 	Review            *github.Review
 	Feedback          []github.Feedback
 	Reviewers         []string
@@ -30,7 +29,6 @@ type Evaluation struct {
 
 type EvaluationInput struct {
 	Plan       Plan
-	Repository string
 	Review     *github.Review
 	Feedback   []github.Feedback
 	Reviewers  []string
@@ -39,7 +37,7 @@ type EvaluationInput struct {
 
 func Evaluate(in EvaluationInput) Evaluation {
 	e := Evaluation{
-		Plan: in.Plan, Repository: in.Repository, Review: in.Review, Feedback: in.Feedback,
+		Plan: in.Plan, Review: in.Review, Feedback: in.Feedback,
 		Reviewers: in.Reviewers,
 	}
 	block := func(reason string) { e.BlockedReasons = append(e.BlockedReasons, reason) }

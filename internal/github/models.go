@@ -31,11 +31,10 @@ type apiReview struct {
 }
 
 type apiReviewComment struct {
-	ID           int64   `json:"id"`
-	User         apiUser `json:"user"`
-	Body         string  `json:"body"`
-	Path         string  `json:"path"`
-	Line         *int    `json:"line"`
-	OriginalLine *int    `json:"original_line"`
-	CreatedAt    string  `json:"created_at"`
+	ID        int64   `json:"id"`
+	User      apiUser `json:"user"`
+	Body      string  `json:"body"`
+	Path      string  `json:"path"`
+	Line      *int    `json:"line"`
+	CreatedAt string  `json:"created_at"`
 }

@@ -9,7 +9,6 @@ type Worktree struct {
 	Path     string
 	Branch   string
 	Prunable bool
-	Bare     bool
 }
 
 func (c *Client) Worktrees(ctx context.Context) ([]Worktree, error) {
@@ -28,8 +27,6 @@ func (c *Client) Worktrees(ctx context.Context) ([]Worktree, error) {
 			current.Branch = strings.TrimPrefix(value, "refs/heads/")
 		case "prunable":
 			current.Prunable = true
-		case "bare":
-			current.Bare = true
 		case "":
 			if current.Path != "" {
 				worktrees = append(worktrees, current)

@@ -8,9 +8,9 @@ import (
 )
 
 // Wait blocks until an already-published review reaches a decision: either
-// allowed (approved) or changes_requested. A terminal (closed/merged) review is
-// an error. onPoll, if non-nil, observes each check so the CLI can report
-// progress.
+// approved, a change request, or new feedback for the agent to act on. A
+// terminal (closed/merged) review is an error. onPoll, if non-nil, observes each
+// check so the CLI can report progress.
 func (s Service) Wait(ctx context.Context, req PublishRequest, pollInterval time.Duration, onPoll func(Evaluation)) (Evaluation, error) {
 	if pollInterval <= 0 {
 		pollInterval = 5 * time.Second

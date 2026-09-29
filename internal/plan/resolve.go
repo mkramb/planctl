@@ -92,7 +92,7 @@ func (s Service) resolve(ctx context.Context, req PublishRequest) (submission, e
 // implRepoName resolves the origin remote to an owner/repository name.
 func (s Service) implRepoName(ctx context.Context, impl *git.Client) (string, error) {
 	if s.Provider == nil {
-		return "", &Error{Code: "provider_unavailable", Message: "GitHub integration is not implemented yet"}
+		return "", &Error{Code: "provider_unavailable", Message: "no review provider configured"}
 	}
 	remote, err := impl.Origin(ctx)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s Service) selectFiles(ctx context.Context, source *git.Client, root, dir 
 				return nil, &Error{Code: "path_not_found", Message: fmt.Sprintf("path %q does not exist", arg)}
 			}
 			rel, err := filepath.Rel(root, abs)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			if err != nil || !filepath.IsLocal(rel) {
 				return nil, &Error{Code: "invalid_path", Message: fmt.Sprintf("path %q is outside the repository", arg)}
 			}
 			info, err := os.Stat(abs)

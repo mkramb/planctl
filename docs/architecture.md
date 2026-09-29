@@ -36,8 +36,6 @@ uses the defaults below; `planctl init` writes a file you can customize.
 
 ```yaml
 version: 1
-review:
-  provider: github      # always github; any other value is an error
 branch:
   base: ""              # default branch when empty
   pattern: "review/{slug}"

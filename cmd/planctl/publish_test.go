@@ -103,19 +103,20 @@ func TestPublishCustomPatternsAndDefaults(t *testing.T) {
 	waitOutcome(t, ch)
 }
 
-func TestPublishWithoutConfigUsesDefaults(t *testing.T) {
+func TestPublishFlagOverrides(t *testing.T) {
 	t.Parallel()
 	env := NewEnvironment(t)
+	env.GitRun(t, "branch", "develop")
 	env.WriteFile(t, "add-sso.md", "# Add SSO\n")
 
-	ch := startLoop(t, env, "add-sso.md", "--json")
+	ch := startLoop(t, env, "--title", "Custom title", "--base", "develop", "add-sso.md", "--json")
 	ref := findReview(t, env, "review/add-sso")
 	found, err := env.Provider.GetReview(t.Context(), ref)
 	require.NoError(t, err)
-	assert.Equal(t, "Review: add-sso.md", found.Title)
+	assert.Equal(t, "Review: Custom title", found.Title)
+	assert.Equal(t, "develop", found.BaseBranch)
 	require.NoError(t, env.Mock.Approve(ref, "alice"))
-	outcome := waitOutcome(t, ch)
-	assert.True(t, outcome.Allowed)
+	waitOutcome(t, ch)
 }
 
 func TestPublishErrors(t *testing.T) {

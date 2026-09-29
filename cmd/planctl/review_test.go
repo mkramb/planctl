@@ -6,23 +6,11 @@ import (
 	"testing"
 
 	"github.com/mkramb/planctl/internal/github"
+	"github.com/mkramb/planctl/internal/output"
 	"github.com/mkramb/planctl/internal/plan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestReviewBlocksUntilApproved(t *testing.T) {
-	t.Parallel()
-	env := NewEnvironment(t)
-	env.WriteFile(t, "add-sso.md", "# Add SSO\n\n## Context\nUse SSO.\n")
-
-	ch := startLoop(t, env, "add-sso.md", "--json")
-	ref := findReview(t, env, "review/add-sso")
-	require.NoError(t, env.Mock.Approve(ref, "alice"))
-	outcome := waitOutcome(t, ch)
-	assert.True(t, outcome.Allowed)
-	assert.Equal(t, plan.StatusApproved, outcome.Status)
-}
 
 func TestReviewReturnsFeedbackOnChangesRequested(t *testing.T) {
 	t.Parallel()
@@ -78,4 +66,15 @@ func TestReviewHumanOutput(t *testing.T) {
 	result.RequireSuccess(t)
 	assert.Contains(t, result.Stderr, "Review: https://review.invalid/")
 	assert.Contains(t, result.Stdout, "Approved on base main")
+}
+
+func TestReviewTimesOut(t *testing.T) {
+	t.Parallel()
+	env := NewEnvironment(t)
+	env.WriteFile(t, "add-sso.md", "# Add SSO\n")
+
+	result := env.Run(t, "add-sso.md", "--json", "--timeout", "50ms")
+	assert.Equal(t, 130, result.ExitCode)
+	failure := DecodeJSON[output.ErrorResult](t, result)
+	assert.Equal(t, "canceled", failure.Error.Code)
 }

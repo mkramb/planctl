@@ -118,6 +118,13 @@ func (r Result) RequireSuccess(t testing.TB) {
 	require.Zero(t, r.ExitCode, "stdout: %s\nstderr: %s", r.Stdout, r.Stderr)
 }
 
+func canonicalPath(t testing.TB, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	return resolved
+}
+
 func isolatedEnv(home string) []string {
 	var env []string
 	for _, entry := range os.Environ() {

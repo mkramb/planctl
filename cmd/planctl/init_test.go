@@ -42,7 +42,7 @@ func TestInitFromNestedDirectory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, created.Config, loaded.Location)
 	assert.Equal(t, "Review: {title}", loaded.Config.PullRequest.Title)
-	assert.Equal(t, "github", loaded.Config.Review.Provider)
+	assert.Equal(t, "review/{slug}", loaded.Config.Branch.Pattern)
 }
 
 func TestInitHumanOutputAndExistingConfig(t *testing.T) {
@@ -160,13 +160,6 @@ func TestConcurrentInitCreatesOnlyOneConfiguration(t *testing.T) {
 	assert.Equal(t, 1, conflicts)
 	_, err := (config.Loader{Executor: process.Runner{}, Env: env.Env}).Load(t.Context(), env.Root, "")
 	require.NoError(t, err)
-}
-
-func canonicalPath(t *testing.T, path string) string {
-	t.Helper()
-	resolved, err := filepath.EvalSymlinks(path)
-	require.NoError(t, err)
-	return resolved
 }
 
 func assertConfigFailure(t *testing.T, result Result, code string) {

@@ -67,7 +67,6 @@ type CreateRequest struct {
 	Body       string
 	HeadBranch string
 	BaseBranch string
-	HeadCommit string
 	Reviewers  []string
 }
 

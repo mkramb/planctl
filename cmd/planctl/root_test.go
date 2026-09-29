@@ -27,11 +27,21 @@ func TestCanceledCommandProducesStructuredFailure(t *testing.T) {
 
 func TestHelpAndVersionNeedNoRepositoryOrProvider(t *testing.T) {
 	t.Parallel()
-	for _, args := range [][]string{{"--help"}, {"--version"}, {"version", "--json"}} {
-		var stdout, stderr bytes.Buffer
-		exit := Run(t.Context(), args, Dependencies{Stdout: &stdout, Stderr: &stderr})
-		assert.Zero(t, exit, "args: %v", args)
-		assert.NotEmpty(t, stdout.String(), "args: %v", args)
-		assert.Empty(t, stderr.String(), "args: %v", args)
+
+	var helpOut, helpErr bytes.Buffer
+	exit := Run(t.Context(), []string{"--help"}, Dependencies{Stdout: &helpOut, Stderr: &helpErr})
+	assert.Zero(t, exit)
+	assert.Empty(t, helpErr.String())
+	for _, want := range []string{"planctl", "--json", "--reviewer"} {
+		assert.Contains(t, helpOut.String(), want)
 	}
+
+	var versionOut, versionErr bytes.Buffer
+	exit = Run(t.Context(), []string{"version", "--json"}, Dependencies{Stdout: &versionOut, Stderr: &versionErr, Version: "test"})
+	assert.Zero(t, exit)
+	assert.Empty(t, versionErr.String())
+	var result output.VersionResult
+	require.NoError(t, json.Unmarshal(versionOut.Bytes(), &result))
+	assert.Equal(t, 1, result.Version)
+	assert.Equal(t, "test", result.Build)
 }

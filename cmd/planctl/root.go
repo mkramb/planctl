@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,7 +88,7 @@ func newRoot(deps Dependencies, opts *options) *cobra.Command {
 			return err
 		}
 		// Emit the pull request URL immediately so the session has it while waiting.
-		_, _ = fmt.Fprintf(deps.Stderr, "Review: %s\n", published.Review.URL)
+		_, _ = fmt.Fprintf(deps.Stderr, "Review: %s\n", published.URL)
 
 		eval, err := service.Wait(ctx, req, poll, func(e plan.Evaluation) {
 			_, _ = fmt.Fprintf(deps.Stderr, "Status %s, approvals %d/%d\n", e.Status, e.Approvals, e.RequiredApprovals)
@@ -207,15 +208,17 @@ func withCause(message string, cause error) string {
 func wantsJSON(args []string) bool {
 	json := false
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--":
+		switch {
+		case args[i] == "--":
 			return json
-		case "--config", "--plan":
-			i++ // The following value is not an output flag.
-		case "--json", "--json=true", "--json=1", "--json=t", "--json=T", "--json=TRUE", "--json=True":
+		case args[i] == "--config":
+			i++ // skip the following value
+		case args[i] == "--json":
 			json = true
-		case "--json=false", "--json=0", "--json=f", "--json=F", "--json=FALSE", "--json=False":
-			json = false
+		case strings.HasPrefix(args[i], "--json="):
+			if value, err := strconv.ParseBool(strings.TrimPrefix(args[i], "--json=")); err == nil {
+				json = value
+			}
 		}
 	}
 	return json

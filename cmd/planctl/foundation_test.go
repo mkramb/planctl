@@ -15,26 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCLIHelpAndVersion(t *testing.T) {
-	t.Parallel()
-	env := NewEnvironment(t)
-	help := env.Run(t, "--help")
-	help.RequireSuccess(t)
-	for _, want := range []string{"planctl", "--json", "--config", "--verbose"} {
-		assert.Contains(t, help.Stdout, want)
-	}
-	assert.Empty(t, help.Stderr)
-	human := env.Run(t, "version")
-	human.RequireSuccess(t)
-	machine := env.Run(t, "version", "--json")
-	machine.RequireSuccess(t)
-	version := DecodeJSON[output.VersionResult](t, machine)
-	assert.Equal(t, 1, version.Version)
-	assert.Equal(t, "test", version.Build)
-	assert.Equal(t, "planctl "+version.Build+"\n", human.Stdout)
-	assert.Empty(t, machine.Stderr)
-}
-
 func TestStructuredUsageErrors(t *testing.T) {
 	t.Parallel()
 	env := NewEnvironment(t)

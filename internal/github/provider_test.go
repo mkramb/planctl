@@ -102,7 +102,7 @@ func TestCreateAndFindReview(t *testing.T) {
 	p := github.NewProviderWithCmd(gh)
 	created, err := p.CreateReview(t.Context(), github.CreateRequest{
 		Repository: "acme/payments", Title: "Plan: Add SSO", Body: "<!-- planctl -->",
-		HeadBranch: "plan/add-sso", BaseBranch: "main", HeadCommit: "abc123",
+		HeadBranch: "plan/add-sso", BaseBranch: "main",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, github.Ref{Provider: "github", Repository: "acme/payments", ID: "142"}, created.Ref)

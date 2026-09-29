@@ -14,7 +14,6 @@ func TestDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, config.Config{
 		Version:     1,
-		Review:      config.Review{Provider: "github"},
 		Branch:      config.Branch{Base: "", Pattern: "review/{slug}"},
 		PullRequest: config.PullRequest{Title: "Review: {title}"},
 	}, cfg)
@@ -23,8 +22,6 @@ func TestDefaults(t *testing.T) {
 func TestExpandedConfiguration(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.Parse([]byte(`version: 1
-review:
-  provider: github
 branch:
   base: master
   pattern: proposal/{slug}
@@ -34,7 +31,6 @@ pull_request:
 	require.NoError(t, err)
 	assert.Equal(t, config.Config{
 		Version:     1,
-		Review:      config.Review{Provider: "github"},
 		Branch:      config.Branch{Base: "master", Pattern: "proposal/{slug}"},
 		PullRequest: config.PullRequest{Title: "Proposal: {title}"},
 	}, cfg)
@@ -53,12 +49,11 @@ func TestInvalidConfiguration(t *testing.T) {
 		{"missing version", "branch:\n  base: master", "unsupported_config_version"},
 		{"future version", "version: 2", "unsupported_config_version"},
 		{"fractional version", "version: 1.5", "invalid_config"},
-		{"provider", "version: 1\nreview:\n  provider: gitlab", "unsupported_review_provider"},
 		{"unknown field", "version: 1\ncurrent_plan: add-sso", "invalid_config"},
-		{"nested unknown field", "version: 1\nreview:\n  reviewers: [alice]", "invalid_config"},
+		{"nested unknown field", "version: 1\nbranch:\n  unknown: x", "invalid_config"},
 		{"removed field", "version: 1\nplan:\n  retention: pr-only", "invalid_config"},
 		{"removed draft field", "version: 1\npull_request:\n  draft: true", "invalid_config"},
-		{"removed approvals field", "version: 1\nreview:\n  required_approvals: 2", "invalid_config"},
+		{"removed review field", "version: 1\nreview:\n  provider: github", "invalid_config"},
 		{"duplicate field", "version: 1\nversion: 1", "invalid_config"},
 		{"multiple documents", "version: 1\n---\nversion: 1", "invalid_config"},
 		{"empty extra document", "version: 1\n---\n", "invalid_config"},

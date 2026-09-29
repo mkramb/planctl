@@ -30,33 +30,6 @@ func TestBuiltBinary(t *testing.T) {
 		Env: append(os.Environ(), "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"),
 	})
 	require.NoError(t, err, "build binary: %s", build.Stderr)
-	for _, scenario := range []struct {
-		name string
-		args []string
-		exit int
-	}{
-		{name: "version", args: []string{"version", "--json"}},
-		{name: "usage failure", args: []string{"--unknown", "--json"}, exit: 2},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			result, err := runner.Run(t.Context(), process.Request{
-				Executable: binary, Args: scenario.args, Dir: t.TempDir(),
-			})
-			assert.Equal(t, scenario.exit, result.ExitCode)
-			assert.Equal(t, scenario.exit == 0, err == nil, "process error: %v", err)
-			assert.Empty(t, result.Stderr)
-			captured := Result{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}
-			if scenario.exit == 0 {
-				version := DecodeJSON[output.VersionResult](t, captured)
-				assert.Equal(t, 1, version.Version)
-				assert.Equal(t, "dev", version.Build)
-			} else {
-				failure := DecodeJSON[output.ErrorResult](t, captured)
-				assert.Equal(t, 1, failure.Version)
-				assert.Equal(t, "invalid_arguments", failure.Error.Code)
-			}
-		})
-	}
 	t.Run("init", func(t *testing.T) {
 		env := NewEnvironment(t)
 		result, err := runner.Run(t.Context(), process.Request{

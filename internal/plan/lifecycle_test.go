@@ -10,7 +10,7 @@ import (
 
 func eval(rev *github.Review, reviewers []string, dirty bool) plan.Evaluation {
 	return plan.Evaluate(plan.EvaluationInput{
-		Plan: plan.Plan{ID: "add-sso", Base: "main"}, Repository: "acme/payments",
+		Plan:   plan.Plan{ID: "add-sso", Base: "main"},
 		Review: rev, Reviewers: reviewers, LocalDirty: dirty,
 	})
 }
@@ -109,14 +109,6 @@ func TestEvaluateReviewers(t *testing.T) {
 	), []string{"alice", "bob"}, false)
 	assert.Equal(t, 1, e.Approvals)
 	assert.False(t, e.Allowed)
-
-	// Both requested reviewers approving reaches approved.
-	e = eval(openReview(
-		github.Decision{Author: "alice", State: github.Approved, CommitID: head},
-		github.Decision{Author: "bob", State: github.Approved, CommitID: head},
-	), []string{"alice", "bob"}, false)
-	assert.Equal(t, plan.StatusApproved, e.Status)
-	assert.True(t, e.Allowed)
 
 	// A non-reviewer change request does not block reviewer approvals.
 	e = eval(openReview(

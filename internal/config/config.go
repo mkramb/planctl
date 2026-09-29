@@ -17,13 +17,8 @@ const minimal = "version: 1\n"
 
 type Config struct {
 	Version     int         `yaml:"version"`
-	Review      Review      `yaml:"review"`
 	Branch      Branch      `yaml:"branch"`
 	PullRequest PullRequest `yaml:"pull_request"`
-}
-
-type Review struct {
-	Provider string `yaml:"provider"`
 }
 
 type Branch struct {
@@ -47,7 +42,6 @@ func (e *Error) Unwrap() error { return e.Cause }
 
 func defaults() Config {
 	return Config{
-		Review:      Review{Provider: "github"},
 		Branch:      Branch{Pattern: "review/{slug}"},
 		PullRequest: PullRequest{Title: "Review: {title}"},
 	}
@@ -86,20 +80,28 @@ func (c Config) validate() error {
 	if c.Version != 1 {
 		return &Error{Code: "unsupported_config_version", Message: fmt.Sprintf("unsupported configuration version %d; set version: 1", c.Version)}
 	}
-	if c.Review.Provider != "github" {
-		return &Error{Code: "unsupported_review_provider", Message: fmt.Sprintf("unsupported review provider %q; planctl supports GitHub only", c.Review.Provider)}
-	}
 	invalid := func(message string) error { return &Error{Code: "invalid_config", Message: message} }
 	if c.Branch.Base != "" && !validBranch(c.Branch.Base) {
 		return invalid("branch.base must be a valid Git branch name")
 	}
-	if strings.Count(c.Branch.Pattern, "{slug}") != 1 || !validBranch(strings.ReplaceAll(c.Branch.Pattern, "{slug}", "example")) || strings.ContainsAny(strings.ReplaceAll(c.Branch.Pattern, "{slug}", ""), "{}") {
+	if !validPattern(c.Branch.Pattern) {
 		return invalid("branch.pattern must be a valid branch pattern containing exactly one {slug}")
 	}
 	if strings.TrimSpace(c.PullRequest.Title) == "" || strings.ContainsAny(strings.ReplaceAll(c.PullRequest.Title, "{title}", ""), "{}\r\n") {
 		return invalid("pull_request.title must be a nonempty single-line title using only the {title} placeholder")
 	}
 	return nil
+}
+
+// validPattern reports whether the branch pattern contains exactly one {slug}
+// placeholder and remains a valid branch name once it is filled in.
+func validPattern(pattern string) bool {
+	if strings.Count(pattern, "{slug}") != 1 {
+		return false
+	}
+	sample := strings.ReplaceAll(pattern, "{slug}", "example")
+	rest := strings.ReplaceAll(pattern, "{slug}", "")
+	return validBranch(sample) && !strings.ContainsAny(rest, "{}")
 }
 
 func validBranch(name string) bool {

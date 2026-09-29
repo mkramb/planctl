@@ -216,13 +216,14 @@ func (r Renderer) Uninstall(result UninstallResult) error {
 	return err
 }
 
+var statusLabels = map[plan.Status]string{
+	plan.StatusDraft: "Draft", plan.StatusInReview: "In review",
+	plan.StatusChangesRequested: "Changes requested", plan.StatusApproved: "Approved",
+	plan.StatusClosed: "Closed", plan.StatusMerged: "Merged",
+}
+
 func statusLabel(status plan.Status) string {
-	labels := map[plan.Status]string{
-		plan.StatusDraft: "Draft", plan.StatusInReview: "In review",
-		plan.StatusChangesRequested: "Changes requested", plan.StatusApproved: "Approved",
-		plan.StatusClosed: "Closed", plan.StatusMerged: "Merged",
-	}
-	return labels[status]
+	return statusLabels[status]
 }
 
 func writeJSON(w io.Writer, result any) error {

@@ -369,12 +369,6 @@ func (m *Mock) FailNextLookup(err error) {
 	m.lookupFailure = err
 }
 
-func (m *Mock) ReviewCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.prs)
-}
-
 func prKey(repo string, num int) string {
 	return repo + ":" + strconv.Itoa(num)
 }

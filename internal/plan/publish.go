@@ -10,102 +10,96 @@ import (
 	"github.com/mkramb/planctl/internal/github"
 )
 
-type Publication struct {
-	Plan   Plan
-	Review github.Review
-	Commit string
-}
-
-func (s Service) Publish(ctx context.Context, req PublishRequest) (Publication, error) {
+func (s Service) Publish(ctx context.Context, req PublishRequest) (github.Review, error) {
 	if s.Provider == nil {
-		return Publication{}, &Error{Code: "provider_unavailable", Message: "GitHub publishing is not implemented yet; this build supports publishing through the integration-test provider only"}
+		return github.Review{}, &Error{Code: "provider_unavailable", Message: "no review provider configured"}
 	}
 	sub, err := s.resolve(ctx, req)
 	if err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	p := sub.plan
 	lock, err := lockWorkspace(filepath.Dir(p.WorkspacePath), p.ID)
 	if err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	defer func() { _ = lock.Unlock() }()
 	if err := s.prepareWorktree(ctx, sub.source, p, sub.baseCommit); err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	if err := s.verifyWorktree(ctx, sub.source, p); err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	repository := sub.repository
 	metadata := Metadata{Version: 1, ID: p.ID, Reviewers: req.Reviewers}
 	lookup := github.FindRequest{Repository: repository, HeadBranch: p.Branch}
 	// Reject terminal or mismatched reviews before committing or pushing.
 	if _, err := s.findPublishable(ctx, lookup, metadata, p.Base); err != nil && !errors.Is(err, github.ErrNotFound) {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	if err := s.syncFiles(ctx, p.WorkspacePath, sub.sourceRoot, p.Files, sub.baseCommit); err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	ws := git.New(s.Executor, p.WorkspacePath, s.Env)
 	staged, err := ws.StagedFiles(ctx)
 	if err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	title := strings.ReplaceAll(sub.config.Config.PullRequest.Title, "{title}", p.Title)
 	if len(staged) > 0 {
 		if err := ws.Commit(ctx, title); err != nil {
-			return Publication{}, err
+			return github.Review{}, err
 		}
 	}
 	head, err := ws.Head(ctx)
 	if err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	if err := ws.PushPlan(ctx, head, p.Branch); err != nil {
 		code := "push_failed"
 		if errors.Is(err, git.ErrPushRejected) {
 			code = "push_rejected"
 		}
-		return Publication{}, &Error{Code: code, Message: "could not push the review branch; local commits are preserved; reconcile remote changes before retrying (no force push was attempted)", Cause: err}
+		return github.Review{}, &Error{Code: code, Message: "could not push the review branch; local commits are preserved; reconcile remote changes before retrying (no force push was attempted)", Cause: err}
 	}
 	existing, err := s.findPublishable(ctx, lookup, metadata, p.Base)
 	if err == nil {
 		if err := s.syncReviewers(ctx, existing, req.Reviewers); err != nil {
-			return Publication{}, err
+			return github.Review{}, err
 		}
-		return Publication{Plan: p, Review: existing, Commit: head}, nil
+		return existing, nil
 	}
 	if !errors.Is(err, github.ErrNotFound) {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	body, err := metadata.Body()
 	if err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
 	created, err := s.Provider.CreateReview(ctx, github.CreateRequest{
 		Repository: repository, Title: title,
-		Body: body, HeadBranch: p.Branch, BaseBranch: p.Base, HeadCommit: head,
+		Body: body, HeadBranch: p.Branch, BaseBranch: p.Base,
 		Reviewers: req.Reviewers,
 	})
 	if err != nil {
 		// The platform may have created the review before the response was lost.
 		// Rediscover it before allowing a retry to attempt another creation.
 		if ctx.Err() != nil {
-			return Publication{}, ctx.Err()
+			return github.Review{}, ctx.Err()
 		}
 		recovered, lookupErr := s.findPublishable(ctx, lookup, metadata, p.Base)
 		if lookupErr == nil {
-			return Publication{Plan: p, Review: recovered, Commit: head}, nil
+			return recovered, nil
 		}
 		if !errors.Is(lookupErr, github.ErrNotFound) {
-			return Publication{}, lookupErr
+			return github.Review{}, lookupErr
 		}
-		return Publication{}, &Error{Code: "review_create_failed", Message: "the branch was pushed but review creation failed; retry publish to rediscover or create the review", Cause: err}
+		return github.Review{}, &Error{Code: "review_create_failed", Message: "the branch was pushed but review creation failed; retry publish to rediscover or create the review", Cause: err}
 	}
 	if err := validateReview(created, lookup, metadata, p.Base); err != nil {
-		return Publication{}, err
+		return github.Review{}, err
 	}
-	return Publication{Plan: p, Review: created, Commit: head}, nil
+	return created, nil
 }
 
 func (s Service) findPublishable(ctx context.Context, req github.FindRequest, metadata Metadata, base string) (github.Review, error) {

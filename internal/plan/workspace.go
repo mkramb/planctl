@@ -50,10 +50,12 @@ func (s Service) prepareWorktree(ctx context.Context, source *git.Client, p Plan
 		return err
 	}
 	for _, worktree := range worktrees {
-		if worktree.Branch != p.Branch && filepath.Clean(worktree.Path) != p.WorkspacePath {
+		sameBranch := worktree.Branch == p.Branch
+		samePath := filepath.Clean(worktree.Path) == p.WorkspacePath
+		if !sameBranch && !samePath {
 			continue
 		}
-		if filepath.Clean(worktree.Path) != p.WorkspacePath || worktree.Branch != p.Branch {
+		if !sameBranch || !samePath {
 			return &Error{Code: "workspace_conflict", Message: fmt.Sprintf("review branch or workspace is already in use at %s", worktree.Path)}
 		}
 		if worktree.Prunable {

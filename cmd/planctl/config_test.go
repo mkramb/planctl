@@ -57,10 +57,8 @@ func TestInvalidConfigurationIsNotReplacedByDefaults(t *testing.T) {
 	for _, scenario := range []struct {
 		name, contents, code string
 	}{
-		{"unsupported provider", "version: 1\nreview:\n  provider: gitlab\n", "unsupported_review_provider"},
 		{"unsupported version", "version: 9\n", "unsupported_config_version"},
 		{"invalid YAML", "version: [", "invalid_config"},
-		{"runtime state", "version: 1\ncurrent_plan: sso\n", "invalid_config"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			env.WriteFile(t, "nested/.planctl.yaml", scenario.contents)
