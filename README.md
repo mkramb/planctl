@@ -31,6 +31,13 @@ A plan is reviewed as a GitHub pull request. Implementation should not start
 until `context --json` reports `implementation.allowed == true`. Reviewers,
 approvals, and change requests all happen on GitHub; `planctl` reads them.
 
+Install the built-in agent skills:
+
+```sh
+planctl skills install                  # claude + opencode
+planctl skills install --agent claude   # Claude Code only
+```
+
 Skills for [Claude Code](skills/claude-code/SKILL.md) and
 [OpenCode](skills/opencode/SKILL.md) automate this workflow.
 

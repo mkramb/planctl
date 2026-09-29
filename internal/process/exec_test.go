@@ -41,11 +41,11 @@ func TestProcessHelper(t *testing.T) {
 		}); err != nil {
 			os.Exit(9)
 		}
-		fmt.Fprint(os.Stderr, "separate diagnostics")
+		_, _ = fmt.Fprint(os.Stderr, "separate diagnostics")
 		os.Exit(0)
 	case "fail":
-		fmt.Fprint(os.Stdout, "partial output")
-		fmt.Fprint(os.Stderr, "sensitive child diagnostic")
+		_, _ = fmt.Fprint(os.Stdout, "partial output")
+		_, _ = fmt.Fprint(os.Stderr, "sensitive child diagnostic")
 		os.Exit(7)
 	case "wait":
 		time.Sleep(30 * time.Second)
@@ -99,7 +99,7 @@ func TestRunnerNonzeroExitPreservesOutputWithoutLeakingIt(t *testing.T) {
 func TestRunnerMissingExecutable(t *testing.T) {
 	t.Parallel()
 	result, err := (process.Runner{}).Run(t.Context(), process.Request{Executable: "planctl-test-missing-executable-9234"})
-	assert.ErrorIs(t, err, exec.ErrNotFound)
+	require.ErrorIs(t, err, exec.ErrNotFound)
 	assert.Equal(t, -1, result.ExitCode)
 }
 

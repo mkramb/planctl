@@ -59,6 +59,7 @@ func newRoot(deps Dependencies, opts *options) *cobra.Command {
 	root.AddCommand(newFeedback(deps, opts))
 	root.AddCommand(newContext(deps, opts))
 	root.AddCommand(newComplete(deps, opts))
+	root.AddCommand(newSkills(deps, opts))
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the planctl build version",
@@ -110,7 +111,7 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	renderer := output.Renderer{Stdout: deps.Stdout, Stderr: deps.Stderr, JSON: wantsJSON(args)}
 	if renderErr := renderer.Error(output.ErrorResult{Version: output.Version, Error: detail}); renderErr != nil {
 		// An output failure must not trigger another write to stdout or leak details.
-		fmt.Fprintln(deps.Stderr, "error: could not write command output")
+		_, _ = fmt.Fprintln(deps.Stderr, "error: could not write command output")
 		return 1
 	}
 	return exitCode
@@ -139,14 +140,14 @@ func classifyError(err error) (output.ErrorDetail, int) {
 		return output.ErrorDetail{Code: "not_git_repository", Message: "not inside a Git working tree; initialize a repository with git init first"}, 1
 	}
 	if errors.As(err, &commandErr) && errors.Is(err, exec.ErrNotFound) {
-		code := "executable_not_found"
-		if commandErr.Executable == "git" {
-			code = "git_not_found"
-			return output.ErrorDetail{Code: code, Message: "git was not found in PATH; install Git and try again"}, 1
-		} else if commandErr.Executable == "gh" {
-			code = "gh_not_found"
+		switch commandErr.Executable {
+		case "git":
+			return output.ErrorDetail{Code: "git_not_found", Message: "git was not found in PATH; install Git and try again"}, 1
+		case "gh":
+			return output.ErrorDetail{Code: "gh_not_found", Message: "gh was not found in PATH; install the GitHub CLI and try again"}, 1
+		default:
+			return output.ErrorDetail{Code: "executable_not_found", Message: commandErr.Error()}, 1
 		}
-		return output.ErrorDetail{Code: code, Message: commandErr.Error()}, 1
 	}
 	return output.ErrorDetail{Code: "operation_failed", Message: err.Error()}, 1
 }

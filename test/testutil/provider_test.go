@@ -70,7 +70,7 @@ func TestMockRepositoryScopeAndDuplicateReview(t *testing.T) {
 	first, err := provider.CreateReview(t.Context(), request)
 	require.NoError(t, err)
 	_, err = provider.CreateReview(t.Context(), request)
-	assert.ErrorIs(t, err, review.ErrExists)
+	require.ErrorIs(t, err, review.ErrExists)
 	request.Repository = "acme/two"
 	second, err := provider.CreateReview(t.Context(), request)
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestMockRepositoryScopeAndDuplicateReview(t *testing.T) {
 	wrong := first.Ref
 	wrong.Repository = "acme/two"
 	_, err = provider.GetReview(t.Context(), wrong)
-	assert.ErrorIs(t, err, review.ErrNotFound)
+	require.ErrorIs(t, err, review.ErrNotFound)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = provider.CreateReview(ctx, request)

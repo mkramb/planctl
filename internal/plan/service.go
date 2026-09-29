@@ -61,7 +61,7 @@ func (s Service) Create(ctx context.Context, req CreateRequest) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	defer lock.Unlock()
+	defer func() { _ = lock.Unlock() }()
 	if err := ctx.Err(); err != nil {
 		return Plan{}, err
 	}

@@ -1,17 +1,10 @@
 [tools]
 go = "1.27.1"
+golangci-lint = "2.14.0"
 
 [tasks.build]
 description = "Build the planctl binary"
 run = "go build -o bin/planctl ./cmd/planctl"
-
-[tasks.test]
-description = "Run all offline tests (requires Git)"
-run = "go test ./..."
-
-[tasks.test-integration]
-description = "Run CLI integration tests with real Git"
-run = "go test ./test/integration/..."
 
 [tasks.fmt]
 description = "Format Go sources"
@@ -20,3 +13,19 @@ run = "go fmt ./..."
 [tasks.vet]
 description = "Run Go static analysis"
 run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run"
+
+[tasks.validate]
+description = "Format, vet, and lint"
+depends = ["fmt", "vet", "lint"]
+
+[tasks.test]
+description = "Run all offline tests (requires Git)"
+run = "go test ./..."
+
+[tasks.test-integration]
+description = "Run CLI integration tests with real Git"
+run = "go test ./test/integration/..."

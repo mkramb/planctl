@@ -13,11 +13,10 @@ jobs:
       - uses: jdx/mise-action@v2
         with:
           version: 2026.5.15
-      - name: Format and vet
-        run: |
-          mise run fmt
-          git diff --exit-code
-          mise run vet
+      - name: Validate (fmt, vet, lint)
+        run: mise run validate
+      - name: Check formatting
+        run: git diff --exit-code
       - name: Test
         run: mise run test
       - name: Build

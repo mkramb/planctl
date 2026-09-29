@@ -59,7 +59,7 @@ func TestResolveRepository(t *testing.T) {
 	}}
 	p = github.NewProviderWithCmd(gh)
 	_, err = p.ResolveRepository(t.Context(), "https://github.com/acme/missing.git")
-	assert.ErrorIs(t, err, review.ErrRepositoryNotFound)
+	require.ErrorIs(t, err, review.ErrRepositoryNotFound)
 
 	_, err = p.ResolveRepository(t.Context(), "/tmp/local/remote.git")
 	assert.ErrorContains(t, err, "not a GitHub URL")
@@ -130,7 +130,7 @@ func TestCreateReviewDraftAndAlreadyExists(t *testing.T) {
 	}}
 	p = github.NewProviderWithCmd(gh)
 	_, err = p.CreateReview(t.Context(), review.CreateRequest{Repository: "acme/payments"})
-	assert.ErrorIs(t, err, review.ErrExists)
+	require.ErrorIs(t, err, review.ErrExists)
 }
 
 func TestFindReviewMissingAmbiguousAndStates(t *testing.T) {
@@ -138,12 +138,12 @@ func TestFindReviewMissingAmbiguousAndStates(t *testing.T) {
 	gh := &fakeGH{responses: []canned{{match: "pr list", stdout: `[]`}}}
 	p := github.NewProviderWithCmd(gh)
 	_, err := p.FindReview(t.Context(), review.FindRequest{Repository: "acme/payments", HeadBranch: "plan/x"})
-	assert.ErrorIs(t, err, review.ErrNotFound)
+	require.ErrorIs(t, err, review.ErrNotFound)
 
 	gh = &fakeGH{responses: []canned{{match: "pr list", stdout: `[{"number":1},{"number":2}]`}}}
 	p = github.NewProviderWithCmd(gh)
 	_, err = p.FindReview(t.Context(), review.FindRequest{Repository: "acme/payments", HeadBranch: "plan/x"})
-	assert.ErrorIs(t, err, review.ErrAmbiguous)
+	require.ErrorIs(t, err, review.ErrAmbiguous)
 
 	for state, want := range map[string]review.State{"MERGED": review.Merged, "CLOSED": review.Closed, "OPEN": review.Open} {
 		gh = &fakeGH{responses: []canned{
@@ -225,16 +225,16 @@ func TestMalformedAndAuthFailures(t *testing.T) {
 	gh := &fakeGH{responses: []canned{{match: "pr list", stdout: `not json`}}}
 	p := github.NewProviderWithCmd(gh)
 	_, err := p.FindReview(t.Context(), review.FindRequest{Repository: "acme/payments", HeadBranch: "plan/x"})
-	assert.ErrorContains(t, err, "could not parse")
+	require.ErrorContains(t, err, "could not parse")
 
 	gh = &fakeGH{responses: []canned{{match: "pr view 999", err: &github.Error{Command: "pr", Detail: "no pull requests found"}}}}
 	p = github.NewProviderWithCmd(gh)
 	_, err = p.GetReview(t.Context(), review.Ref{Provider: "github", Repository: "acme/payments", ID: "999"})
-	assert.ErrorIs(t, err, review.ErrNotFound)
+	require.ErrorIs(t, err, review.ErrNotFound)
 
 	gh = &fakeGH{responses: []canned{{match: "pr list", err: &github.Error{Command: "pr", Detail: "gh auth login required"}}}}
 	p = github.NewProviderWithCmd(gh)
 	_, err = p.FindReview(t.Context(), review.FindRequest{Repository: "acme/payments", HeadBranch: "plan/x"})
-	assert.ErrorContains(t, err, "gh auth login required")
+	require.ErrorContains(t, err, "gh auth login required")
 	assert.NotErrorIs(t, err, review.ErrNotFound)
 }

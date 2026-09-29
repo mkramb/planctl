@@ -15,6 +15,8 @@ mise run build
 ```sh
 mise run fmt               # format
 mise run vet               # static analysis
+mise run lint              # golangci-lint
+mise run validate          # fmt + vet + lint
 mise run test              # all tests
 mise run test-integration  # integration tests only
 mise run build             # build bin/planctl

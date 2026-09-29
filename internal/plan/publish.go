@@ -29,7 +29,7 @@ func (s Service) Publish(ctx context.Context, req PublishRequest) (Publication, 
 	if err != nil {
 		return Publication{}, err
 	}
-	defer lock.Unlock()
+	defer func() { _ = lock.Unlock() }()
 	if err := s.verifyWorktree(ctx, selected.client, p); err != nil {
 		return Publication{}, err
 	}

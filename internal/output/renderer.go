@@ -126,6 +126,16 @@ type CompleteResult struct {
 	WorkspaceRemoved bool              `json:"workspace_removed"`
 }
 
+type SkillInstall struct {
+	Agent string `json:"agent"`
+	Path  string `json:"path"`
+}
+
+type SkillsResult struct {
+	Version   int            `json:"version"`
+	Installed []SkillInstall `json:"installed"`
+}
+
 func NewCompleteResult(c plan.Completion) CompleteResult {
 	return CompleteResult{
 		Version: Version,
@@ -306,6 +316,18 @@ func (r Renderer) Context(result ContextResult) error {
 		fmt.Fprintf(&b, "Implementation allowed on base %s\n", result.Implementation.Base)
 	} else {
 		fmt.Fprintf(&b, "Implementation blocked: %s\n", strings.Join(result.Implementation.BlockedReasons, ", "))
+	}
+	_, err := fmt.Fprint(r.Stdout, b.String())
+	return err
+}
+
+func (r Renderer) Skills(result SkillsResult) error {
+	if r.JSON {
+		return writeJSON(r.Stdout, result)
+	}
+	var b strings.Builder
+	for _, installed := range result.Installed {
+		fmt.Fprintf(&b, "Installed %s skill at %s\n", installed.Agent, installed.Path)
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err
