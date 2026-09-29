@@ -14,70 +14,54 @@ seam, not a plugin system.
 
 ## Example session with OpenCode
 
-Here's how a plan flows from a coding agent through GitHub review.
+You never type `planctl` commands yourself — the agent does. Here's the whole
+thing.
 
-### Setup
+### Setup (once)
 
-1. Install `planctl` (see [Install](#install)) and authenticate the GitHub CLI
-   (`gh auth login`).
+```sh
+gh auth login
+planctl skills install --agent opencode
+# restart OpenCode
+cd your-repo && planctl init
+```
 
-2. Install the planctl integration (skill + `/planctl` command) into OpenCode:
+### Then it's just a conversation
 
-   ```sh
-   planctl skills install --agent opencode
-   ```
+> **You:** "Add single sign-on to the payments service."
 
-   Then restart OpenCode so it picks up the skill and command.
+OpenCode writes a Markdown plan and opens a GitHub pull request for it, then
+waits. You don't run anything.
 
-3. Initialize the repository you want to plan in:
+> **You** (on GitHub): review the pull request. Comment, request changes, or
+> approve.
 
-   ```sh
-   planctl init
-   ```
+- If you **approve**, OpenCode sees it and starts writing code.
+- If you **request changes**, OpenCode reads your comments, updates the plan, and
+  re-opens it for another look. Repeat until you approve.
 
-### Using it
+That's the whole loop: you ask, OpenCode plans, you review on GitHub, OpenCode
+implements once you've approved.
 
-Ask OpenCode to implement something non-trivial, for example:
+### The one rule
 
-> "Add single sign-on to the payments service."
+OpenCode will **not** write implementation code until the plan is approved. It
+enforces this itself with `planctl review`, which blocks and only returns
+`implementation.allowed == true` once the review is approved. You stay in charge
+through GitHub's normal review flow.
 
-The skill takes over and drives `planctl` for you:
+### Plan mode
 
-1. OpenCode runs `planctl create "Add SSO"` and writes the Markdown plan (with
-   any Mermaid diagrams) at the returned path. It has not touched implementation
-   code.
+You don't have to be in plan mode or know anything about `planctl`. It works in a
+normal OpenCode session. (OpenCode's built-in plan agent is a different, separate
+feature; planctl uses its own skill and doesn't depend on it.)
 
-2. OpenCode runs `planctl review`, which commits the plan, pushes a
-   `plan/add-sso` branch, opens a ready-for-review GitHub pull request, and then
-   **blocks**. It does not return until the review reaches a decision.
-
-3. Your team reviews on GitHub: inline comments, review threads, "request
-   changes", and approvals.
-
-4. If a reviewer requests changes, `planctl review` returns with
-   `implementation.allowed == false` and `blocked_reasons: ["changes_requested"]`.
-   OpenCode runs `planctl feedback`, revises the plan, and runs `planctl review`
-   again.
-
-5. When the team approves, `planctl review` returns with
-   `implementation.allowed == true`. Only then does OpenCode start writing code —
-   in your normal checkout, not the plan worktree.
-
-6. After implementation, OpenCode runs `planctl complete`. `pr-only` retention
-   closes the pull request without merging; `repository` retention merges the
-   plan into the base branch.
-
-The gate is deterministic: **`planctl review` blocks and cannot return with
-`implementation.allowed == true` until the plan is approved.** Reviewers,
-approvals, and change requests all happen on GitHub; `planctl` reads them and
-enforces the gate.
-
-The `/planctl` command lets you drive planctl directly from either agent:
+If you ever want to drive it yourself, a `/planctl` command is installed:
 
 ```
 /planctl status
-/planctl review
 /planctl feedback
+/planctl review
 ```
 
 ## Install
