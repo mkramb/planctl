@@ -12,70 +12,65 @@ the plan lifecycle.
 a fake for GitHub so tests run fast and offline; that interface is a testing
 seam, not a plugin system.
 
-## Example session
+## Example session with OpenCode
 
-A developer asks their coding agent to add single sign-on.
+Here's how a plan flows from a coding agent through GitHub review.
 
-1. The agent turns the request into a plan:
+### Setup
+
+1. Install `planctl` (see [Install](#install)) and authenticate the GitHub CLI
+   (`gh auth login`).
+
+2. Install the planctl skill into OpenCode:
+
+   ```sh
+   planctl skills install --agent opencode
+   ```
+
+   Then restart OpenCode so it picks up the skill.
+
+3. Initialize the repository you want to plan in:
 
    ```sh
    planctl init
-   planctl create "Add SSO" --json
    ```
 
-   The `create` output includes `plan.absolute_path`. The agent writes the
-   Markdown (and any Mermaid diagrams) there and does not touch implementation
-   code yet.
+### Using it
 
-2. The agent publishes the plan for review:
+Ask OpenCode to implement something non-trivial, for example:
 
-   ```sh
-   planctl publish --json
-   ```
+> "Add single sign-on to the payments service."
 
-   This commits the plan, pushes a `plan/add-sso` branch, and opens a
-   ready-for-review GitHub pull request.
+The skill takes over and drives `planctl` for you:
 
-3. The team reviews on GitHub: inline comments, review threads, "request
+1. OpenCode runs `planctl create "Add SSO"` and writes the Markdown plan (with
+   any Mermaid diagrams) at the returned path. It has not touched implementation
+   code.
+
+2. OpenCode runs `planctl publish`, which commits the plan, pushes a
+   `plan/add-sso` branch, and opens a ready-for-review GitHub pull request.
+
+3. OpenCode stops. It will not implement anything while the plan is under review.
+
+4. Your team reviews on GitHub: inline comments, review threads, "request
    changes", and approvals.
 
-4. When asked to continue, the agent checks the review:
+5. When you ask OpenCode to continue, it runs `planctl context` to check the
+   review. If `changes_requested` is set, it runs `planctl feedback` to read the
+   comments, revises the plan, and runs `planctl publish` again to update the
+   same pull request.
 
-   ```sh
-   planctl context --json
-   ```
+6. Only when the team approves and `planctl context` reports
+   `implementation.allowed == true` does OpenCode start writing code — in your
+   normal checkout, not the plan worktree.
 
-   The response reports `implementation.allowed` and, when blocked, the
-   `blocked_reasons`.
+7. After implementation, OpenCode runs `planctl complete`. `pr-only` retention
+   closes the pull request without merging; `repository` retention merges the
+   plan into the base branch.
 
-5. If changes were requested, the agent reads them and revises:
-
-   ```sh
-   planctl feedback --json
-   # edit plan.absolute_path to address the comments
-   planctl publish --json   # updates the same pull request
-   ```
-
-6. Once the team approves the current revision:
-
-   ```sh
-   planctl context --json   # implementation.allowed == true
-   ```
-
-7. The agent implements the change in the normal repository checkout.
-
-8. After implementation, the agent finishes the plan:
-
-   ```sh
-   planctl complete --json
-   ```
-
-   `pr-only` retention closes the pull request without merging; `repository`
-   retention merges the plan into the base branch.
-
-The core rule: **do not start implementing until `implementation.allowed` is
-`true`.** Reviewers, approvals, and change requests all happen on GitHub;
-`planctl` reads them and enforces the gate.
+The skill encodes the core rule: **do not start implementing until
+`implementation.allowed` is `true`.** Reviewers, approvals, and change requests
+all happen on GitHub; `planctl` reads them and enforces the gate.
 
 ## Install
 
