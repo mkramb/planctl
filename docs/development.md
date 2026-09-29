@@ -56,34 +56,8 @@ Use `require` for setup steps and `assert` for result checks (testify).
 
 ## Releasing
 
-Releases are built with [GoReleaser](https://goreleaser.com/) for macOS arm64.
-Tagging a release triggers `.github/workflows/release.yml`, which builds the
-binary and attaches it to a new GitHub Release.
-
-1. Make sure `master` is green and up to date.
-2. Tag and push:
-
-   ```sh
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
-The workflow builds `planctl_1.0.0_darwin_arm64.tar.gz` plus `checksums.txt` and
-publishes them as a GitHub Release with generated release notes. The tag's
-leading `v` is stripped for the version reported by `planctl --version`.
-
-Users install the latest release with:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/mkramb/planctl/master/install.sh | sh
-```
-
-To build a release locally (or verify the config) without publishing:
-
-```sh
-mise x goreleaser@latest -- goreleaser check      # validate .goreleaser.yaml
-mise x goreleaser@latest -- goreleaser build --snapshot --clean
-```
+See [releasing](releasing.md) for the tag-and-push release flow and how users
+install the built binary.
 
 ## Agent skills
 
