@@ -1,5 +1,5 @@
-// Package skill installs planctl's agent integration (a skill plus a /planctl
-// slash command) into the target agent's own directory.
+// Package skill installs planctl's /planctl slash command into the target
+// agent's own command directory.
 package skill
 
 import (
@@ -19,65 +19,46 @@ const (
 
 func All() []Agent { return []Agent{Claude, OpenCode} }
 
-// File describes one installed file.
-type File struct {
-	Kind string
-	Path string
-}
-
-// Paths returns where the skill and command live without touching the filesystem.
-func Paths(home string, agent Agent) (skill, command string, err error) {
+// Path returns where an agent's /planctl command lives without touching the
+// filesystem.
+func Path(home string, agent Agent) (string, error) {
 	switch agent {
 	case Claude:
-		return filepath.Join(home, ".claude", "skills", "planctl", "SKILL.md"),
-			filepath.Join(home, ".claude", "commands", "planctl.md"), nil
+		return filepath.Join(home, ".claude", "commands", "planctl.md"), nil
 	case OpenCode:
-		return filepath.Join(home, ".config", "opencode", "skills", "planctl", "SKILL.md"),
-			filepath.Join(home, ".config", "opencode", "command", "planctl.md"), nil
+		return filepath.Join(home, ".config", "opencode", "command", "planctl.md"), nil
 	default:
-		return "", "", fmt.Errorf("unknown agent %q", agent)
+		return "", fmt.Errorf("unknown agent %q", agent)
 	}
 }
 
-// Install writes the skill and slash command for the given agent under home.
-func Install(home string, agent Agent) ([]File, error) {
-	skillPath, commandPath, err := Paths(home, agent)
+// Install writes the /planctl slash command for the given agent under home and
+// returns the installed path.
+func Install(home string, agent Agent) (string, error) {
+	path, err := Path(home, agent)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	skillData, commandData, err := content(agent)
+	data, err := content(agent)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if err := write(skillPath, skillData); err != nil {
-		return nil, err
-	}
-	if err := write(commandPath, commandData); err != nil {
-		return nil, err
-	}
-	return []File{
-		{Kind: "skill", Path: skillPath},
-		{Kind: "command", Path: commandPath},
-	}, nil
-}
-
-func write(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create directory: %w", err)
+		return "", fmt.Errorf("create command directory: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write file: %w", err)
+		return "", fmt.Errorf("write command file: %w", err)
 	}
-	return nil
+	return path, nil
 }
 
-func content(agent Agent) (skill, command []byte, err error) {
+func content(agent Agent) ([]byte, error) {
 	switch agent {
 	case Claude:
-		return skills.ClaudeCode, skills.ClaudeCommand, nil
+		return skills.ClaudeCommand, nil
 	case OpenCode:
-		return skills.OpenCode, skills.OpenCodeCommand, nil
+		return skills.OpenCodeCommand, nil
 	default:
-		return nil, nil, fmt.Errorf("unknown agent %q", agent)
+		return nil, fmt.Errorf("unknown agent %q", agent)
 	}
 }

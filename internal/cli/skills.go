@@ -14,7 +14,7 @@ func newSkills(deps Dependencies, opts *options) *cobra.Command {
 	var agent string
 	install := &cobra.Command{
 		Use:   "install",
-		Short: "Install the planctl skill for a coding agent",
+		Short: "Install the /planctl command for a coding agent",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			agents, err := parseAgents(agent)
@@ -27,13 +27,11 @@ func newSkills(deps Dependencies, opts *options) *cobra.Command {
 			}
 			result := output.SkillsResult{Version: output.Version}
 			for _, a := range agents {
-				files, err := skill.Install(home, a)
+				path, err := skill.Install(home, a)
 				if err != nil {
 					return err
 				}
-				for _, f := range files {
-					result.Installed = append(result.Installed, output.SkillInstall{Agent: string(a), Kind: f.Kind, Path: f.Path})
-				}
+				result.Installed = append(result.Installed, output.SkillInstall{Agent: string(a), Path: path})
 			}
 			return (output.Renderer{Stdout: deps.Stdout, Stderr: deps.Stderr, JSON: opts.json}).Skills(result)
 		},
@@ -42,7 +40,7 @@ func newSkills(deps Dependencies, opts *options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Install planctl skills for coding agents",
+		Short: "Install the /planctl command for coding agents",
 	}
 	cmd.AddCommand(install)
 	return cmd

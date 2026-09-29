@@ -14,56 +14,57 @@ seam, not a plugin system.
 
 ## Example session with OpenCode
 
-You never type `planctl` commands yourself — the agent does. Here's the whole
-thing.
+You drive planctl through a `/planctl` command installed into your agent. Here's
+the whole thing.
 
 ### Setup (once)
 
 ```sh
 gh auth login
-planctl skills install --agent opencode
+planctl skills install --agent opencode   # installs the /planctl command
 # restart OpenCode
 cd your-repo && planctl init
 ```
 
-### Then it's just a conversation
+### Using it
 
-> **You:** "Add single sign-on to the payments service."
+Ask OpenCode to plan a change, then run the command yourself:
 
-OpenCode writes a Markdown plan and opens a GitHub pull request for it, then
-waits. You don't run anything.
+```
+/planctl create "Add single sign-on"
+```
 
-> **You** (on GitHub): review the pull request. Comment, request changes, or
-> approve.
+OpenCode creates the plan and tells you where the Markdown file is. Have it
+write the plan, then publish it for review:
 
-- If you **approve**, OpenCode sees it and starts writing code.
-- If you **request changes**, OpenCode reads your comments, updates the plan, and
-  re-opens it for another look. Repeat until you approve.
+```
+/planctl review
+```
 
-That's the whole loop: you ask, OpenCode plans, you review on GitHub, OpenCode
-implements once you've approved.
+This opens a GitHub pull request and blocks until the review reaches a decision.
+On GitHub, your team comments, requests changes, or approves:
+
+- **Request changes** → `/planctl feedback` to read the comments, revise, then
+  `/planctl review` again.
+- **Approve** → `/planctl review` returns with `implementation.allowed == true`,
+  and only then should OpenCode start writing code.
+
+When implementation is done, finish the plan:
+
+```
+/planctl complete
+```
 
 ### The one rule
 
-OpenCode will **not** write implementation code until the plan is approved. It
-enforces this itself with `planctl review`, which blocks and only returns
-`implementation.allowed == true` once the review is approved. You stay in charge
-through GitHub's normal review flow.
+`planctl review` blocks and only returns `implementation.allowed == true` once
+the review is approved. You stay in charge through GitHub's normal review flow.
 
 ### Plan mode
 
 Use planctl in a normal session, not OpenCode's plan mode. `planctl create` and
 `planctl publish` write to disk (they create a worktree, push a branch, and open
-a PR), so they're blocked while plan mode is read-only. If you're in plan mode,
-switch out of it before the agent runs `planctl review`.
-
-If you ever want to drive it yourself, a `/planctl` command is installed:
-
-```
-/planctl status
-/planctl feedback
-/planctl review
-```
+a PR), so they're blocked while plan mode is read-only.
 
 ## Install
 
@@ -104,22 +105,21 @@ mise run build   # produces bin/planctl
 | `planctl feedback` | List review comments |
 | `planctl context` | Report whether implementation is allowed |
 | `planctl complete` | Close (pr-only) or merge (repository) the review |
-| `planctl skills install` | Install the agent skill and `/planctl` command |
+| `planctl skills install` | Install the `/planctl` command for an agent |
 
 Every command supports `--json` for agents and plain text for humans. See
 [architecture](docs/architecture.md), [configuration](docs/configuration.md),
 and [publishing](docs/publishing.md) for details.
 
-## Agent skills
+## Agent command
 
 ```sh
 planctl skills install                  # Claude Code + OpenCode
 planctl skills install --agent claude   # Claude Code only
 ```
 
-This installs both a skill and a `/planctl` slash command per agent. The skills
-([Claude Code](skills/claude-code/SKILL.md), [OpenCode](skills/opencode/SKILL.md))
-automate the workflow above; the command exposes `planctl` directly.
+This installs a `/planctl` slash command per agent, so you can run planctl
+directly (`/planctl create`, `/planctl review`, `/planctl status`, and so on).
 
 ## Development
 

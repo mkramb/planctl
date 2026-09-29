@@ -128,7 +128,6 @@ type CompleteResult struct {
 
 type SkillInstall struct {
 	Agent string `json:"agent"`
-	Kind  string `json:"kind"`
 	Path  string `json:"path"`
 }
 
@@ -331,7 +330,7 @@ func (r Renderer) Skills(result SkillsResult) error {
 	}
 	var b strings.Builder
 	for _, installed := range result.Installed {
-		fmt.Fprintf(&b, "Installed %s %s at %s\n", installed.Agent, installed.Kind, installed.Path)
+		fmt.Fprintf(&b, "Installed /planctl for %s at %s\n", installed.Agent, installed.Path)
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err

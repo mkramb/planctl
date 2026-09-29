@@ -59,10 +59,9 @@ Use `require` for setup steps and `assert` for result checks (testify).
 See [releasing](releasing.md) for the tag-and-push release flow and how users
 install the built binary.
 
-## Agent skills
+## Agent command
 
-`skills/claude-code/SKILL.md` and `skills/opencode/SKILL.md` drive the plan
-workflow, and `planctl skills install` also writes a `/planctl` slash command
-(`skills/*/commands/planctl.md`) so users can run planctl directly. Both route
-implementation through the `planctl review` gate, which blocks until the review
-is approved.
+`planctl skills install` writes a `/planctl` slash command
+(`skills/*/commands/planctl.md`) per agent so users can run planctl directly.
+Implementation routes through the `planctl review` gate, which blocks until the
+review is approved.
