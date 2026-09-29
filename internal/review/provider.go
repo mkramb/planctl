@@ -88,4 +88,9 @@ type Provider interface {
 	FindReview(context.Context, FindRequest) (Review, error)
 	GetReview(context.Context, Ref) (Review, error)
 	Feedback(context.Context, Ref) ([]Feedback, error)
+	// CloseReview closes without merging; MergeReview merges into the base.
+	// Repeating the achieved terminal state succeeds; the other terminal state
+	// is an error.
+	CloseReview(context.Context, Ref) error
+	MergeReview(context.Context, Ref) error
 }

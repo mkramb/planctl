@@ -67,5 +67,6 @@ func (s Service) Inspect(ctx context.Context, req PublishRequest) (Evaluation, e
 		Review: found, Feedback: feedback,
 		RequiredApprovals: selected.config.Config.Review.RequiredApprovals,
 		LocalCommit:       localCommit, LocalDirty: dirty,
+		Retention: selected.config.Config.Plan.Retention,
 	}), nil
 }

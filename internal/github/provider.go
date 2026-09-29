@@ -221,6 +221,22 @@ func apiGet[T any](ctx context.Context, gh Cmd, endpoint string, target *[]T) er
 	return nil
 }
 
+func (p *Provider) CloseReview(ctx context.Context, ref review.Ref) error {
+	_, err := p.gh.Run(ctx, "pr", "close", ref.ID, "--repo", ref.Repository)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Provider) MergeReview(ctx context.Context, ref review.Ref) error {
+	_, err := p.gh.Run(ctx, "pr", "merge", ref.ID, "--repo", ref.Repository, "--merge")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func prState(state string) review.State {
 	switch strings.ToUpper(state) {
 	case "MERGED":

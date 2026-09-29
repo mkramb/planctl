@@ -116,6 +116,40 @@ type ContextResult struct {
 	Implementation ImplementationResult `json:"implementation"`
 }
 
+type CompleteResult struct {
+	Version          int               `json:"version"`
+	Plan             ContextPlanResult `json:"plan"`
+	Review           ReviewResult      `json:"review"`
+	Retention        string            `json:"retention"`
+	PrunedRemote     bool              `json:"pruned_remote"`
+	WorkspaceRemoved bool              `json:"workspace_removed"`
+}
+
+func NewCompleteResult(c plan.Completion) CompleteResult {
+	return CompleteResult{
+		Version: Version,
+		Plan: ContextPlanResult{
+			ID: c.Plan.ID, Title: c.Plan.Title, Path: c.Plan.Path, Status: statusForState(c.Review.State),
+			WorkspacePath: c.Plan.WorkspacePath, AbsolutePath: c.Plan.AbsolutePath,
+		},
+		Review:           ReviewResult{ID: c.Review.Ref.ID, Provider: c.Review.Ref.Provider, URL: c.Review.URL, State: c.Review.State, Draft: c.Review.Draft},
+		Retention:        c.Retention,
+		PrunedRemote:     c.PrunedRemote,
+		WorkspaceRemoved: c.WorkspaceRemoved,
+	}
+}
+
+func statusForState(state review.State) plan.Status {
+	switch state {
+	case review.Merged:
+		return plan.StatusMerged
+	case review.Closed:
+		return plan.StatusClosed
+	default:
+		return plan.StatusInReview
+	}
+}
+
 func reviewResult(eval plan.Evaluation) *ReviewResult {
 	if eval.Review == nil {
 		return nil
@@ -271,6 +305,24 @@ func (r Renderer) Context(result ContextResult) error {
 		fmt.Fprintf(&b, "Implementation allowed on base %s\n", result.Implementation.Base)
 	} else {
 		fmt.Fprintf(&b, "Implementation blocked: %s\n", strings.Join(result.Implementation.BlockedReasons, ", "))
+	}
+	_, err := fmt.Fprint(r.Stdout, b.String())
+	return err
+}
+
+func (r Renderer) Complete(result CompleteResult) error {
+	if r.JSON {
+		return writeJSON(r.Stdout, result)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Completed plan: %s\nRetention: %s\nReview: %s\n", result.Plan.Title, result.Retention, result.Review.URL)
+	if result.PrunedRemote {
+		fmt.Fprintf(&b, "Remote branch: pruned\n")
+	}
+	if result.WorkspaceRemoved {
+		fmt.Fprintf(&b, "Worktree: removed\n")
+	} else {
+		fmt.Fprintf(&b, "Worktree: kept (has local work)\n")
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err

@@ -54,3 +54,15 @@ distinct approvals exist for the published revision, no active changes request
 remains, and the local plan matches what was published. Comment-only reviews do
 not erase decisions; dismissed reviews do. Approvals of an older revision do not
 count after republishing.
+
+## Completion
+
+`complete` finishes the plan lifecycle once implementation is done:
+
+- `pr-only` retention closes the review without merging.
+- `repository` retention merges the plan into the base branch.
+
+Completion requires the review to be approved and ready. `--prune-remote` (off
+by default) deletes the remote plan branch afterwards. A clean managed worktree
+is removed after completion; one with local work is kept. Re-running `complete
+--plan <slug>` after finalization is idempotent and retries branch pruning.

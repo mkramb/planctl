@@ -19,6 +19,7 @@ type Evaluation struct {
 	Plan              Plan
 	Repository        string
 	PlansRepository   string
+	Retention         string
 	Review            *review.Review
 	Feedback          []review.Feedback
 	Status            Status
@@ -32,6 +33,7 @@ type EvaluationInput struct {
 	Plan              Plan
 	Repository        string
 	PlansRepository   string
+	Retention         string
 	Review            *review.Review
 	Feedback          []review.Feedback
 	RequiredApprovals int
@@ -42,7 +44,7 @@ type EvaluationInput struct {
 func Evaluate(in EvaluationInput) Evaluation {
 	e := Evaluation{
 		Plan: in.Plan, Repository: in.Repository, PlansRepository: in.PlansRepository,
-		Review: in.Review, Feedback: in.Feedback,
+		Retention: in.Retention, Review: in.Review, Feedback: in.Feedback,
 		RequiredApprovals: in.RequiredApprovals,
 	}
 	block := func(reason string) { e.BlockedReasons = append(e.BlockedReasons, reason) }

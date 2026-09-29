@@ -234,6 +234,35 @@ func (p *MockReviewProvider) SetState(ref review.Ref, state review.State) error 
 	return nil
 }
 
+func (p *MockReviewProvider) CloseReview(ctx context.Context, ref review.Ref) error {
+	return p.terminate(ctx, ref, review.Closed)
+}
+
+func (p *MockReviewProvider) MergeReview(ctx context.Context, ref review.Ref) error {
+	return p.terminate(ctx, ref, review.Merged)
+}
+
+func (p *MockReviewProvider) terminate(ctx context.Context, ref review.Ref, state review.State) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	found, ok := p.reviews[ref]
+	if !ok {
+		return review.ErrNotFound
+	}
+	if found.State == state {
+		return nil
+	}
+	if found.State != review.Open {
+		return fmt.Errorf("cannot move a %s review to %s", found.State, state)
+	}
+	found.State = state
+	p.reviews[ref] = found
+	return nil
+}
+
 func (p *MockReviewProvider) ReviewCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()

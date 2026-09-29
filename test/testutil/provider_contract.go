@@ -56,4 +56,26 @@ func ReviewProviderContract(t *testing.T, newProvider func(*testing.T) review.Pr
 		require.NoError(t, err)
 		assert.True(t, fetched.Draft)
 	})
+	t.Run("close and merge terminal states", func(t *testing.T) {
+		provider := newProvider(t)
+		created, err := provider.CreateReview(t.Context(), review.CreateRequest{
+			Repository: "acme/payments", Title: "Plan: X", HeadBranch: "plan/x", BaseBranch: "main",
+		})
+		require.NoError(t, err)
+		require.NoError(t, provider.CloseReview(t.Context(), created.Ref))
+		got, err := provider.GetReview(t.Context(), created.Ref)
+		require.NoError(t, err)
+		assert.Equal(t, review.Closed, got.State)
+		require.NoError(t, provider.CloseReview(t.Context(), created.Ref), "repeating close succeeds")
+
+		merged, err := provider.CreateReview(t.Context(), review.CreateRequest{
+			Repository: "acme/payments", Title: "Plan: Y", HeadBranch: "plan/y", BaseBranch: "main",
+		})
+		require.NoError(t, err)
+		require.NoError(t, provider.MergeReview(t.Context(), merged.Ref))
+		got, err = provider.GetReview(t.Context(), merged.Ref)
+		require.NoError(t, err)
+		assert.Equal(t, review.Merged, got.State)
+		assert.Error(t, provider.MergeReview(t.Context(), created.Ref), "merging a closed review fails")
+	})
 }

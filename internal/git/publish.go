@@ -44,6 +44,26 @@ func (c *Client) PlanDirty(ctx context.Context, path string) (bool, error) {
 	return result.Stdout != "", err
 }
 
+// Dirty reports any staged, modified, or untracked state in the worktree.
+func (c *Client) Dirty(ctx context.Context) (bool, error) {
+	result, err := c.Run(ctx, "status", "--porcelain", "-z")
+	return result.Stdout != "", err
+}
+
+// DeleteRemoteBranch removes a remote branch; an already-absent branch is success.
+func (c *Client) DeleteRemoteBranch(ctx context.Context, remote, branch string) error {
+	result, err := c.Run(ctx, "push", "--porcelain", "--", remote, ":refs/heads/"+branch)
+	if err != nil && strings.Contains(result.Stderr, "remote ref does not exist") {
+		return nil
+	}
+	return err
+}
+
+func (c *Client) RemoveWorktree(ctx context.Context, path string) error {
+	_, err := c.Run(ctx, "worktree", "remove", "--", path)
+	return err
+}
+
 // HistoryFiles also catches unrelated work that was committed and later reverted.
 // Merge commits are rejected: merging implementation work into a plan branch can
 // expose that history even when the final diff only contains a plan.
