@@ -36,6 +36,8 @@ The flow is: Cobra command -> operation -> Git / ReviewProvider -> typed result
 
 - `cmd/planctl` - startup and exit code only.
 - `internal/cli` - commands, flags, wiring.
+- `internal/config` - config discovery, defaults, validation, and initialization.
+- `internal/plan` - plan identity, templates, and managed worktrees.
 - `internal/process` - runs external programs; the only place that execs.
 - `internal/git` - the user's real `git`.
 - `internal/review` - provider-neutral review types and interface.
@@ -58,6 +60,21 @@ The flow is: Cobra command -> operation -> Git / ReviewProvider -> typed result
   picked automatically, that's an error.
 - `publish` commits only the plan file, pushes, and creates or updates one
   review per plan. Reviews are created ready for review, not drafts.
+
+Worktrees live at:
+
+```text
+<user cache>/planctl/worktrees/<repo-name>-<repo-key>/<slug>/
+```
+
+The key is a hash of Git's shared repository directory. Worktrees from one clone
+reuse the same plan location; separate clones get separate locations. Commands
+return the full editable path. Per-plan OS locks prevent concurrent writes and
+release when the process exits. Unpublished edits are never discarded.
+
+`create` can retry after a branch or worktree was created but the template was
+not written. It refuses unrelated paths and branches containing other work.
+If Git still lists a missing worktree, repair that registration before retrying.
 
 ## Reviews and approval
 

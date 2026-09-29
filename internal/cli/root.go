@@ -9,7 +9,10 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/mkramb/planctl/internal/config"
+	"github.com/mkramb/planctl/internal/git"
 	"github.com/mkramb/planctl/internal/output"
+	"github.com/mkramb/planctl/internal/plan"
 	"github.com/mkramb/planctl/internal/process"
 	"github.com/mkramb/planctl/internal/review"
 	"github.com/spf13/cobra"
@@ -23,6 +26,7 @@ type Dependencies struct {
 	Executor process.Executor
 	Provider review.Provider
 	Version  string
+	CacheDir string
 }
 
 type options struct {
@@ -47,6 +51,9 @@ func newRoot(deps Dependencies, opts *options) *cobra.Command {
 	root.PersistentFlags().StringVar(&opts.config, "config", "", "Path to .planctl.yaml")
 	root.PersistentFlags().BoolVar(&opts.verbose, "verbose", false, "Include diagnostic details on stderr")
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
+	root.AddCommand(newInit(deps, opts))
+	root.AddCommand(newCreate(deps, opts))
+	root.AddCommand(newPublish(deps, opts))
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the planctl build version",
@@ -112,10 +119,22 @@ func classifyError(err error) (output.ErrorDetail, int) {
 		return output.ErrorDetail{Code: "invalid_arguments", Message: err.Error()}, 2
 	}
 	var commandErr *process.Error
+	var configErr *config.Error
+	var planErr *plan.Error
+	if errors.As(err, &planErr) {
+		return output.ErrorDetail{Code: planErr.Code, Message: planErr.Message}, 1
+	}
+	if errors.As(err, &configErr) {
+		return output.ErrorDetail{Code: configErr.Code, Message: configErr.Message}, 1
+	}
+	if errors.Is(err, git.ErrNotRepository) {
+		return output.ErrorDetail{Code: "not_git_repository", Message: "not inside a Git working tree; initialize a repository with git init first"}, 1
+	}
 	if errors.As(err, &commandErr) && errors.Is(err, exec.ErrNotFound) {
 		code := "executable_not_found"
 		if commandErr.Executable == "git" {
 			code = "git_not_found"
+			return output.ErrorDetail{Code: code, Message: "git was not found in PATH; install Git and try again"}, 1
 		} else if commandErr.Executable == "gh" {
 			code = "gh_not_found"
 		}
@@ -132,7 +151,7 @@ func wantsJSON(args []string) bool {
 		switch args[i] {
 		case "--":
 			return json
-		case "--config":
+		case "--config", "--plan":
 			i++ // The following value is not an output flag.
 		case "--json", "--json=true", "--json=1", "--json=t", "--json=T", "--json=TRUE", "--json=True":
 			json = true

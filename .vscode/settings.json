@@ -1,0 +1,55 @@
+{
+  "editor.accessibilitySupport": "off",
+  "editor.semanticHighlighting.enabled": true,
+  "diffEditor.ignoreTrimWhitespace": false,
+
+  // Point the Go extension at the Go toolchain installed by mise.
+  "go.goroot": "${env:HOME}/.local/share/mise/installs/go/1.27.1",
+
+  // Resolve Go tools through mise shims so they always match mise.toml
+  // pins. Shims are stable paths; they auto-pick the version mise resolves
+  // for this project (see mise.toml at the repo root).
+  "go.alternateTools": {
+    "go": "${env:HOME}/.local/share/mise/shims/go",
+    "golangci-lint": "${env:HOME}/.local/share/mise/shims/golangci-lint",
+    "gofumpt": "${env:HOME}/.local/share/mise/shims/gofumpt"
+  },
+
+  // mise manages versions — don't let the Go extension install its own.
+  "go.toolsManagement.autoUpdate": false,
+  "go.toolsManagement.checkForUpdates": "off",
+
+  // Language server + formatting (gofumpt via gopls).
+  "go.useLanguageServer": true,
+  "go.formatTool": "default",
+  "gopls": {
+    "formatting.gofumpt": true,
+    "build.buildFlags": ["-tags=integration"]
+  },
+
+  "go.buildTags": "integration",
+  "go.testTags": "integration",
+
+  // Lint on save with the workspace's golangci-lint config.
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "workspace",
+
+  // Format + organize imports on save for Go files only.
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // Ensure the integrated terminal inherits a login shell so mise
+  // activation (and PATH shims) are picked up by gopls and any CLIs.
+  "terminal.integrated.automationProfile.osx": {
+    "path": "/usr/bin/zsh",
+    "args": ["--login"]
+  },
+
+  // disabled features
+  "gitlens.plusFeatures.enabled": false,
+  "chat.disableAIFeatures": true
+}

@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("review not found")
-	ErrExists    = errors.New("an open review already exists for this branch")
-	ErrAmbiguous = errors.New("multiple reviews match this branch")
+	ErrNotFound           = errors.New("review not found")
+	ErrExists             = errors.New("an open review already exists for this branch")
+	ErrAmbiguous          = errors.New("multiple reviews match this branch")
+	ErrRepositoryNotFound = errors.New("review repository not found")
 )
 
 // Ref scopes an ID to its provider and repository; IDs alone are not globally unique.
@@ -82,6 +83,7 @@ type FindRequest struct {
 
 // Provider is deliberately small. Completion operations will be added when used.
 type Provider interface {
+	ResolveRepository(context.Context, string) (string, error)
 	CreateReview(context.Context, CreateRequest) (Review, error)
 	FindReview(context.Context, FindRequest) (Review, error)
 	GetReview(context.Context, Ref) (Review, error)

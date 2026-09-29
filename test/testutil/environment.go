@@ -23,6 +23,7 @@ type Environment struct {
 	Env      []string
 	Git      *git.Client
 	Provider *MockReviewProvider
+	CacheDir string
 }
 
 type Result struct {
@@ -45,6 +46,7 @@ func NewEnvironment(t testing.TB) *Environment {
 	e := &Environment{
 		Root: root, Remote: remote, Env: env,
 		Git: git.New(process.Runner{}, root, env), Provider: NewMockReviewProvider(),
+		CacheDir: filepath.Join(base, "cache"),
 	}
 	e.GitRun(t, "init", "--initial-branch=main")
 	for _, setting := range [][2]string{
@@ -62,6 +64,7 @@ func NewEnvironment(t testing.TB) *Environment {
 	require.NoError(t, e.Git.Commit(t.Context(), "Initial commit"))
 	e.GitRun(t, "remote", "add", "origin", remote)
 	require.NoError(t, e.Git.Push(t.Context(), "origin", "main"))
+	e.Provider.RegisterRepository("acme/payments", remote, env)
 	return e
 }
 
@@ -76,6 +79,7 @@ func (e *Environment) RunAt(t testing.TB, dir string, args ...string) Result {
 	exit := cli.Run(t.Context(), args, cli.Dependencies{
 		Dir: dir, Env: e.Env, Stdout: &stdout, Stderr: &stderr,
 		Executor: process.Runner{}, Provider: e.Provider, Version: "test",
+		CacheDir: e.CacheDir,
 	})
 	return Result{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: exit}
 }
@@ -115,13 +119,14 @@ func isolatedEnv(home string) []string {
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		upper := strings.ToUpper(key)
-		if strings.HasPrefix(upper, "GIT_") || upper == "HOME" || upper == "USERPROFILE" || upper == "XDG_CONFIG_HOME" {
+		if strings.HasPrefix(upper, "GIT_") || upper == "HOME" || upper == "USERPROFILE" || upper == "XDG_CONFIG_HOME" || upper == "XDG_CACHE_HOME" {
 			continue
 		}
 		env = append(env, entry)
 	}
 	return append(env,
 		"HOME="+home, "USERPROFILE="+home, "XDG_CONFIG_HOME="+home,
+		"XDG_CACHE_HOME="+filepath.Join(filepath.Dir(home), "cache"),
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_CONFIG_SYSTEM="+os.DevNull, "GIT_TERMINAL_PROMPT=0",
 		"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z",

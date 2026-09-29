@@ -3,10 +3,15 @@ package git
 
 import (
 	"context"
+	"errors"
+	"os"
+	"slices"
 	"strings"
 
 	"github.com/mkramb/planctl/internal/process"
 )
+
+var ErrNotRepository = errors.New("not inside a Git working tree")
 
 type Client struct {
 	executor process.Executor
@@ -21,13 +26,26 @@ func New(executor process.Executor, dir string, env []string) *Client {
 // Run is the Git-only escape hatch for commands without a dedicated helper yet.
 // Every invocation has an explicit working directory and goes through process.
 func (c *Client) Run(ctx context.Context, args ...string) (process.Result, error) {
+	env := c.env
+	if env == nil {
+		env = os.Environ()
+	}
+	// Keep Git diagnostics predictable when translating known repository errors.
+	env = append(slices.Clone(env), "LC_ALL=C")
 	return c.executor.Run(ctx, process.Request{
-		Executable: "git", Args: args, Dir: c.dir, Env: c.env,
+		Executable: "git", Args: args, Dir: c.dir, Env: env,
 	})
 }
 
 func (c *Client) Root(ctx context.Context) (string, error) {
-	return c.value(ctx, "rev-parse", "--show-toplevel")
+	result, err := c.Run(ctx, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if strings.Contains(result.Stderr, "not a git repository") || strings.Contains(result.Stderr, "must be run in a work tree") {
+			return "", ErrNotRepository
+		}
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
 }
 
 func (c *Client) CommonDirectory(ctx context.Context) (string, error) {
@@ -35,7 +53,11 @@ func (c *Client) CommonDirectory(ctx context.Context) (string, error) {
 }
 
 func (c *Client) CurrentBranch(ctx context.Context) (string, error) {
-	return c.value(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	branch, err := c.value(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if exitedWith(err, 1) {
+		return "", nil // A detached HEAD has no current branch.
+	}
+	return branch, err
 }
 
 func (c *Client) Head(ctx context.Context) (string, error) {

@@ -7,12 +7,41 @@ Git provides history. GitHub provides collaboration. `planctl` connects them.
 
 ## Development status
 
-V1 is being built incrementally. The foundation provides CLI help, versioned
-errors, external process execution, and an offline integration harness with real
-Git and a stateful fake review provider. Lifecycle commands are next; they are
-not yet available.
+V1 is being built incrementally. CLI help, versioned output, `init`, and `create`
+are ready. Publishing and republishing work in the integration harness with the
+fake review provider. The GitHub adapter and review-status commands are next.
 
 See [architecture](docs/architecture.md) for design decisions.
+
+## Initialize a repository
+
+From an existing Git repository or one of its subdirectories:
+
+```sh
+planctl init
+```
+
+This creates `.planctl.yaml` at the worktree root. It does not overwrite an
+existing file or change Git history. See [configuration](docs/configuration.md)
+for defaults and `--config`.
+
+## Create a plan
+
+```sh
+planctl create "Add SSO" --json
+```
+
+Edit the returned `plan.absolute_path`. The Markdown template lives in a separate
+Git worktree; your current branch and files stay untouched. Creation works from
+an existing worktree too. It creates a local plan branch but does not commit or
+push. Repeating the same title reports the existing plan without overwriting it.
+
+## Publishing (under development)
+
+The publish workflow commits only the selected plan, pushes its branch, and
+creates or reuses one review. See [publishing](docs/publishing.md) for selection
+and retry behavior. The standalone binary currently reports `provider_unavailable`
+without changing Git; real GitHub publishing arrives with the GitHub adapter.
 
 ## Development
 
