@@ -15,6 +15,25 @@ skills are next.
 
 See [architecture](docs/architecture.md) for design decisions.
 
+## Usage
+
+```sh
+planctl init
+planctl create "Add SSO" --json     # edit the returned plan.absolute_path
+planctl publish --json               # open or update the review
+planctl feedback --json              # read review feedback
+planctl publish --json               # revise and republish
+planctl context --json               # check implementation.allowed
+planctl complete --json              # close (pr-only) or merge (repository)
+```
+
+A plan is reviewed as a GitHub pull request. Implementation should not start
+until `context --json` reports `implementation.allowed == true`. Reviewers,
+approvals, and change requests all happen on GitHub; `planctl` reads them.
+
+Skills for [Claude Code](skills/claude-code/SKILL.md) and
+[OpenCode](skills/opencode/SKILL.md) automate this workflow.
+
 ## Initialize a repository
 
 From an existing Git repository or one of its subdirectories:

@@ -51,3 +51,9 @@ Use `require` for setup steps and `assert` for result checks (testify).
 - `--help` and `--version` remain text; use `version --json` for JSON.
 - Human output is text; diagnostics go to stderr.
 - Exit codes: 0 ok, 1 failure, 2 bad arguments, 130 canceled.
+
+## Agent skills
+
+`skills/claude-code/SKILL.md` and `skills/opencode/SKILL.md` drive the plan
+workflow. They use `--json` output and stop before implementation until
+`context --json` reports `implementation.allowed == true`.

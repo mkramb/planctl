@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.5.15
+      - name: Format and vet
+        run: |
+          mise run fmt
+          git diff --exit-code
+          mise run vet
+      - name: Test
+        run: mise run test
+      - name: Build
+        run: mise run build
