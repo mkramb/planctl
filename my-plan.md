@@ -39,16 +39,6 @@ exit codes, or the JSON contract.
    - stderr only; stdout and JSON payloads unchanged
    - `--json --verbose` must still emit valid JSON on stdout
 
-## Testing
-
-- Unit: logger no-op when disabled; format/prefix of emitted lines.
-- Unit: `plan.Service` emits expected debug events (inject a buffer-backed
-  logger) for resolve/publish/wait paths.
-- Integration: `planctl --verbose` on the in-memory GitHub mock shows exec
-  lines plus plan-level lines; `mise run test-integration`.
-- Contract: `--json --verbose` output parses as JSON with no stderr bleed
-  into stdout.
-
 ## Out of scope
 
 - Log levels beyond on/off, log files, timestamps/colors.
