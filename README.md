@@ -7,9 +7,9 @@ Git provides history. GitHub provides collaboration. `planctl` connects them.
 
 ## Development status
 
-V1 is being built incrementally. CLI help, versioned output, `init`, and `create`
-are ready. Publishing, republishing, `status`, `feedback`, and `context` work in
-the integration harness with the fake review provider. The GitHub adapter is next.
+V1 is being built incrementally. `init`, `create`, `publish`, `status`,
+`feedback`, and `context` are implemented. The GitHub adapter is wired and
+covered by fixture tests; it has not yet been exercised against live GitHub.
 
 See [architecture](docs/architecture.md) for design decisions.
 

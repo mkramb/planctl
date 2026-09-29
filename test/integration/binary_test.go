@@ -83,7 +83,8 @@ func TestBuiltBinary(t *testing.T) {
 			Executable: binary, Args: []string{"publish", "--json"}, Dir: env.Root, Env: env.Env,
 		})
 		require.Error(t, err)
-		assertConfigFailure(t, testutil.Result{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, "provider_unavailable")
+		// The real GitHub adapter is now wired: a local-path remote cannot resolve.
+		assertConfigFailure(t, testutil.Result{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, "repository_lookup_failed")
 		assert.Equal(t, before, env.GitRun(t, "rev-parse", "refs/heads/plan/add-sso"), "missing adapter must not commit anything")
 	})
 	t.Run("missing git", func(t *testing.T) {

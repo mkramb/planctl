@@ -11,6 +11,7 @@ import (
 
 	"github.com/mkramb/planctl/internal/config"
 	"github.com/mkramb/planctl/internal/git"
+	"github.com/mkramb/planctl/internal/github"
 	"github.com/mkramb/planctl/internal/output"
 	"github.com/mkramb/planctl/internal/plan"
 	"github.com/mkramb/planctl/internal/process"
@@ -87,6 +88,9 @@ func Run(ctx context.Context, args []string, deps Dependencies) int {
 	}
 	if deps.Executor == nil {
 		deps.Executor = process.Runner{}
+	}
+	if deps.Provider == nil {
+		deps.Provider = github.NewProvider(deps.Executor)
 	}
 	if deps.Version == "" {
 		deps.Version = "dev"
