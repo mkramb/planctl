@@ -129,6 +129,8 @@ func isolatedEnv(home string) []string {
 		"XDG_CACHE_HOME="+filepath.Join(filepath.Dir(home), "cache"),
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_CONFIG_SYSTEM="+os.DevNull, "GIT_TERMINAL_PROMPT=0",
+		"GIT_AUTHOR_NAME=Planctl Test", "GIT_AUTHOR_EMAIL=planctl@example.invalid",
+		"GIT_COMMITTER_NAME=Planctl Test", "GIT_COMMITTER_EMAIL=planctl@example.invalid",
 		"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z",
 	)
 }
