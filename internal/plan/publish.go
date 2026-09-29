@@ -156,12 +156,19 @@ func (s Service) findPublishable(ctx context.Context, req review.FindRequest, me
 }
 
 func validateReview(found review.Review, req review.FindRequest, want Metadata, base string) error {
-	metadata, err := ParseMetadata(found.Body)
-	if err != nil || metadata != want || found.Ref.Repository != req.Repository || found.HeadBranch != req.HeadBranch || found.BaseBranch != base || found.Ref.ID == "" || found.Ref.Provider == "" {
-		return &Error{Code: "review_conflict", Message: "the existing review does not match this plan's identity and base branch"}
+	if err := validateIdentity(found, req.Repository, req.HeadBranch, want, base); err != nil {
+		return err
 	}
 	if found.State != review.Open {
 		return &Error{Code: "review_terminal", Message: "the plan review is already closed or merged; publish will not reopen or replace it"}
+	}
+	return nil
+}
+
+func validateIdentity(found review.Review, repository, branch string, want Metadata, base string) error {
+	metadata, err := ParseMetadata(found.Body)
+	if err != nil || metadata != want || found.Ref.Repository != repository || found.HeadBranch != branch || found.BaseBranch != base || found.Ref.ID == "" || found.Ref.Provider == "" {
+		return &Error{Code: "review_conflict", Message: "the existing review does not match this plan's identity and base branch"}
 	}
 	return nil
 }

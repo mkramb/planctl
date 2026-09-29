@@ -38,3 +38,19 @@ mirror branches or push extra tags are disabled for this push.
 
 Each review description contains a versioned metadata block with the plan slug
 and implementation repository. Republish preserves the description and feedback.
+
+## Review lifecycle
+
+`status`, `feedback`, and `context` read the review through the provider:
+
+- `status` shows the lifecycle state: `draft`, `in_review`, `changes_requested`,
+  `approved`, `closed`, or `merged`, plus approvals and feedback count.
+- `feedback` lists review comments (author, path, line, body).
+- `context` is for agents: it reports `implementation.allowed` and machine-readable
+  `blocked_reasons`.
+
+Implementation is allowed only when the review is open and not a draft, enough
+distinct approvals exist for the published revision, no active changes request
+remains, and the local plan matches what was published. Comment-only reviews do
+not erase decisions; dismissed reviews do. Approvals of an older revision do not
+count after republishing.

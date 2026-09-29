@@ -54,6 +54,9 @@ func newRoot(deps Dependencies, opts *options) *cobra.Command {
 	root.AddCommand(newInit(deps, opts))
 	root.AddCommand(newCreate(deps, opts))
 	root.AddCommand(newPublish(deps, opts))
+	root.AddCommand(newStatus(deps, opts))
+	root.AddCommand(newFeedback(deps, opts))
+	root.AddCommand(newContext(deps, opts))
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the planctl build version",

@@ -8,8 +8,8 @@ Git provides history. GitHub provides collaboration. `planctl` connects them.
 ## Development status
 
 V1 is being built incrementally. CLI help, versioned output, `init`, and `create`
-are ready. Publishing and republishing work in the integration harness with the
-fake review provider. The GitHub adapter and review-status commands are next.
+are ready. Publishing, republishing, `status`, `feedback`, and `context` work in
+the integration harness with the fake review provider. The GitHub adapter is next.
 
 See [architecture](docs/architecture.md) for design decisions.
 

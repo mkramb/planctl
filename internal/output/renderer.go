@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/mkramb/planctl/internal/config"
 	"github.com/mkramb/planctl/internal/plan"
@@ -53,6 +54,115 @@ type PublishResult struct {
 	Commit  string       `json:"commit"`
 }
 
+type PlanStatusResult struct {
+	ID     string      `json:"id"`
+	Status plan.Status `json:"status"`
+}
+
+type ApprovalResult struct {
+	Current  int `json:"current"`
+	Required int `json:"required"`
+}
+
+type StatusResult struct {
+	Version       int              `json:"version"`
+	Plan          PlanStatusResult `json:"plan"`
+	Review        *ReviewResult    `json:"review,omitempty"`
+	Approval      ApprovalResult   `json:"approval"`
+	FeedbackCount int              `json:"feedback_count"`
+}
+
+type FeedbackItem struct {
+	ID     string `json:"id"`
+	Author string `json:"author"`
+	Body   string `json:"body"`
+	Path   string `json:"path,omitempty"`
+	Line   *int   `json:"line,omitempty"`
+}
+
+type FeedbackResult struct {
+	Version  int            `json:"version"`
+	Plan     plan.Plan      `json:"plan"`
+	Status   plan.Status    `json:"status"`
+	Review   *ReviewResult  `json:"review,omitempty"`
+	Feedback []FeedbackItem `json:"feedback"`
+}
+
+type ContextPlanResult struct {
+	ID            string      `json:"id"`
+	Title         string      `json:"title"`
+	Path          string      `json:"path"`
+	Status        plan.Status `json:"status"`
+	WorkspacePath string      `json:"workspace_path"`
+	AbsolutePath  string      `json:"absolute_path"`
+}
+
+type RepositoriesResult struct {
+	Implementation string `json:"implementation"`
+	Plans          string `json:"plans"`
+}
+
+type ImplementationResult struct {
+	Allowed        bool     `json:"allowed"`
+	Base           string   `json:"base"`
+	BlockedReasons []string `json:"blocked_reasons"`
+}
+
+type ContextResult struct {
+	Version        int                  `json:"version"`
+	Plan           ContextPlanResult    `json:"plan"`
+	Repositories   RepositoriesResult   `json:"repositories"`
+	Review         *ReviewResult        `json:"review,omitempty"`
+	Implementation ImplementationResult `json:"implementation"`
+}
+
+func reviewResult(eval plan.Evaluation) *ReviewResult {
+	if eval.Review == nil {
+		return nil
+	}
+	return &ReviewResult{
+		ID: eval.Review.Ref.ID, Provider: eval.Review.Ref.Provider, URL: eval.Review.URL,
+		State: eval.Review.State, Draft: eval.Review.Draft,
+	}
+}
+
+func NewStatusResult(eval plan.Evaluation) StatusResult {
+	return StatusResult{
+		Version:       Version,
+		Plan:          PlanStatusResult{ID: eval.Plan.ID, Status: eval.Status},
+		Review:        reviewResult(eval),
+		Approval:      ApprovalResult{Current: eval.Approvals, Required: eval.RequiredApprovals},
+		FeedbackCount: len(eval.Feedback),
+	}
+}
+
+func NewFeedbackResult(eval plan.Evaluation) FeedbackResult {
+	items := make([]FeedbackItem, len(eval.Feedback))
+	for i, f := range eval.Feedback {
+		items[i] = FeedbackItem{ID: f.ID, Author: f.Author, Body: f.Body, Path: f.Path, Line: f.Line}
+	}
+	return FeedbackResult{Version: Version, Plan: eval.Plan, Status: eval.Status, Review: reviewResult(eval), Feedback: items}
+}
+
+func NewContextResult(eval plan.Evaluation) ContextResult {
+	reasons := eval.BlockedReasons
+	if reasons == nil {
+		reasons = []string{}
+	}
+	return ContextResult{
+		Version: Version,
+		Plan: ContextPlanResult{
+			ID: eval.Plan.ID, Title: eval.Plan.Title, Path: eval.Plan.Path, Status: eval.Status,
+			WorkspacePath: eval.Plan.WorkspacePath, AbsolutePath: eval.Plan.AbsolutePath,
+		},
+		Repositories: RepositoriesResult{Implementation: eval.Repository, Plans: eval.PlansRepository},
+		Review:       reviewResult(eval),
+		Implementation: ImplementationResult{
+			Allowed: eval.Allowed, Base: eval.Plan.Base, BlockedReasons: reasons,
+		},
+	}
+}
+
 type Renderer struct {
 	Stdout io.Writer
 	Stderr io.Writer
@@ -97,6 +207,72 @@ func (r Renderer) Publish(result PublishResult) error {
 	}
 	_, err := fmt.Fprintf(r.Stdout, "Published plan: %s\nReview: %s\nBranch: %s\nCommit: %s\n",
 		result.Plan.Title, result.Review.URL, result.Plan.Branch, result.Commit)
+	return err
+}
+
+func statusLabel(status plan.Status) string {
+	labels := map[plan.Status]string{
+		plan.StatusDraft: "Draft", plan.StatusInReview: "In review",
+		plan.StatusChangesRequested: "Changes requested", plan.StatusApproved: "Approved",
+		plan.StatusClosed: "Closed", plan.StatusMerged: "Merged",
+	}
+	return labels[status]
+}
+
+func (r Renderer) Status(result StatusResult) error {
+	if r.JSON {
+		return writeJSON(r.Stdout, result)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n", result.Plan.ID)
+	if result.Review != nil {
+		fmt.Fprintf(&b, "Provider    %s\nReview      #%s\n", result.Review.Provider, result.Review.ID)
+	}
+	fmt.Fprintf(&b, "Status      %s\n", statusLabel(result.Plan.Status))
+	if result.Review != nil {
+		fmt.Fprintf(&b, "Approvals   %d / %d\n", result.Approval.Current, result.Approval.Required)
+		fmt.Fprintf(&b, "Feedback    %d\n", result.FeedbackCount)
+	}
+	_, err := fmt.Fprint(r.Stdout, b.String())
+	return err
+}
+
+func (r Renderer) Feedback(result FeedbackResult) error {
+	if r.JSON {
+		return writeJSON(r.Stdout, result)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", result.Plan.Title)
+	if result.Review != nil {
+		fmt.Fprintf(&b, "%s #%s\n", result.Review.Provider, result.Review.ID)
+	}
+	fmt.Fprintf(&b, "\n%s\n", strings.ToUpper(statusLabel(result.Status)))
+	for _, item := range result.Feedback {
+		fmt.Fprintf(&b, "\n%s", item.Author)
+		if item.Path != "" {
+			fmt.Fprintf(&b, " — %s", item.Path)
+			if item.Line != nil {
+				fmt.Fprintf(&b, ":%d", *item.Line)
+			}
+		}
+		fmt.Fprintf(&b, "\n\n  %s\n", item.Body)
+	}
+	_, err := fmt.Fprint(r.Stdout, b.String())
+	return err
+}
+
+func (r Renderer) Context(result ContextResult) error {
+	if r.JSON {
+		return writeJSON(r.Stdout, result)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\nPlan file    %s\nStatus       %s\n", result.Plan.Title, result.Plan.AbsolutePath, statusLabel(result.Plan.Status))
+	if result.Implementation.Allowed {
+		fmt.Fprintf(&b, "Implementation allowed on base %s\n", result.Implementation.Base)
+	} else {
+		fmt.Fprintf(&b, "Implementation blocked: %s\n", strings.Join(result.Implementation.BlockedReasons, ", "))
+	}
+	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err
 }
 

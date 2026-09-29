@@ -38,6 +38,12 @@ func (c *Client) StagedFiles(ctx context.Context) ([]string, error) {
 	return splitPaths(result.Stdout), err
 }
 
+// PlanDirty reports staged, modified, or untracked state for one path.
+func (c *Client) PlanDirty(ctx context.Context, path string) (bool, error) {
+	result, err := c.Run(ctx, "status", "--porcelain", "-z", "--", path)
+	return result.Stdout != "", err
+}
+
 // HistoryFiles also catches unrelated work that was committed and later reverted.
 // Merge commits are rejected: merging implementation work into a plan branch can
 // expose that history even when the final diff only contains a plan.
