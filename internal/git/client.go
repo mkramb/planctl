@@ -4,6 +4,7 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -32,9 +33,27 @@ func (c *Client) Run(ctx context.Context, args ...string) (process.Result, error
 	}
 	// Keep Git diagnostics predictable when translating known repository errors.
 	env = append(slices.Clone(env), "LC_ALL=C")
-	return c.executor.Run(ctx, process.Request{
+	result, err := c.executor.Run(ctx, process.Request{
 		Executable: "git", Args: args, Dir: c.dir, Env: env,
 	})
+	if err != nil {
+		err = withStderr(err, result.Stderr)
+	}
+	return result, err
+}
+
+// withStderr appends a short sanitized snippet of git's stderr so failures are
+// diagnosable. It never includes arguments or environment.
+func withStderr(err error, stderr string) error {
+	const limit = 300
+	detail := strings.Join(strings.Fields(stderr), " ")
+	if len(detail) > limit {
+		detail = detail[:limit]
+	}
+	if detail == "" {
+		return err
+	}
+	return fmt.Errorf("%w: %s", err, detail)
 }
 
 func (c *Client) Root(ctx context.Context) (string, error) {
