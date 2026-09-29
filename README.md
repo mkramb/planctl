@@ -1,5 +1,9 @@
 # planctl
 
+<p align="center">
+  <img src="docs/assets/logo.png" alt="planctl logo" width="400" />
+</p>
+
 Send files to a GitHub pull request for review and loop on the feedback until it's approved.
 
 `/planctl plan.md` publishes `plan.md` as a PR, prints the URL, and waits. When someone comments, it returns the comments so your agent can revise and re-run — repeat until the review is approved. Point it at a plan, a folder, several files, or nothing (auto-detects your changes).
