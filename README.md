@@ -79,7 +79,7 @@ Set `PREFIX` to choose the install directory (defaults to `/usr/local/bin`, or
 `~/.local/bin` if that isn't writable) and `PLANCTL_VERSION` to pin a version:
 
 ```sh
-PREFIX="$HOME/.local/bin" curl -fsSL https://raw.githubusercontent.com/mkramb/planctl/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mkramb/planctl/master/install.sh | PREFIX="$HOME/.local/bin" sh
 ```
 
 Alternatively, download a binary from the latest
