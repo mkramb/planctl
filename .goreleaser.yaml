@@ -1,0 +1,26 @@
+version: 2
+
+builds:
+  - id: planctl
+    main: ./cmd/planctl
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin]
+    goarch: [arm64]
+
+archives:
+  - formats: [tar.gz]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+release:
+  github:
+    owner: mkramb
+    name: planctl

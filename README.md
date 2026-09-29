@@ -69,11 +69,9 @@ If you ever want to drive it yourself, a `/planctl` command is installed:
 `planctl` is a single Go binary. It drives your installed `git` and GitHub CLI
 (`gh`); authenticate `gh` before publishing.
 
-```sh
-go install github.com/mkramb/planctl/cmd/planctl@latest
-```
-
-Or build from source with [mise](https://mise.jdx.dev/):
+Download the macOS (arm64) binary from the latest
+[GitHub Release](https://github.com/mkramb/planctl/releases), or build from
+source with [mise](https://mise.jdx.dev/):
 
 ```sh
 mise install
