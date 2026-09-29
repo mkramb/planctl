@@ -38,6 +38,22 @@ mirror branches or push extra tags are disabled for this push.
 Each review description contains a versioned metadata block with the plan slug
 and implementation repository. Republish preserves the description and feedback.
 
+## Review gate
+
+`planctl review` publishes the plan and then blocks until the review reaches a
+decision:
+
+```sh
+planctl review --json
+planctl review --plan add-sso --poll 5s --timeout 30m
+```
+
+It returns when `implementation.allowed` is `true` (approved), or when the review
+has `changes_requested` (so the agent can revise and run `review` again). A
+closed or merged review is an error. Progress goes to stderr; stdout stays a
+single JSON document. Use `--timeout` to bound the wait; the default waits
+indefinitely and honors Ctrl-C.
+
 ## Review lifecycle
 
 `status`, `feedback`, and `context` read the review from GitHub:

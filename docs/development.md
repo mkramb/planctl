@@ -57,5 +57,7 @@ Use `require` for setup steps and `assert` for result checks (testify).
 ## Agent skills
 
 `skills/claude-code/SKILL.md` and `skills/opencode/SKILL.md` drive the plan
-workflow. They use `--json` output and stop before implementation until
-`context --json` reports `implementation.allowed == true`.
+workflow, and `planctl skills install` also writes a `/planctl` slash command
+(`skills/*/commands/planctl.md`) so users can run planctl directly. Both route
+implementation through the `planctl review` gate, which blocks until the review
+is approved.

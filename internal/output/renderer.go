@@ -128,6 +128,7 @@ type CompleteResult struct {
 
 type SkillInstall struct {
 	Agent string `json:"agent"`
+	Kind  string `json:"kind"`
 	Path  string `json:"path"`
 }
 
@@ -312,6 +313,9 @@ func (r Renderer) Context(result ContextResult) error {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\nPlan file    %s\nStatus       %s\n", result.Plan.Title, result.Plan.AbsolutePath, statusLabel(result.Plan.Status))
+	if result.Review != nil {
+		fmt.Fprintf(&b, "Review       %s\n", result.Review.URL)
+	}
 	if result.Implementation.Allowed {
 		fmt.Fprintf(&b, "Implementation allowed on base %s\n", result.Implementation.Base)
 	} else {
@@ -327,7 +331,7 @@ func (r Renderer) Skills(result SkillsResult) error {
 	}
 	var b strings.Builder
 	for _, installed := range result.Installed {
-		fmt.Fprintf(&b, "Installed %s skill at %s\n", installed.Agent, installed.Path)
+		fmt.Fprintf(&b, "Installed %s %s at %s\n", installed.Agent, installed.Kind, installed.Path)
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err

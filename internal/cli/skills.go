@@ -27,11 +27,13 @@ func newSkills(deps Dependencies, opts *options) *cobra.Command {
 			}
 			result := output.SkillsResult{Version: output.Version}
 			for _, a := range agents {
-				path, err := skill.Install(home, a)
+				files, err := skill.Install(home, a)
 				if err != nil {
 					return err
 				}
-				result.Installed = append(result.Installed, output.SkillInstall{Agent: string(a), Path: path})
+				for _, f := range files {
+					result.Installed = append(result.Installed, output.SkillInstall{Agent: string(a), Kind: f.Kind, Path: f.Path})
+				}
 			}
 			return (output.Renderer{Stdout: deps.Stdout, Stderr: deps.Stderr, JSON: opts.json}).Skills(result)
 		},

@@ -30,9 +30,11 @@
   "go.buildTags": "integration",
   "go.testTags": "integration",
 
-  // Lint on save with the workspace's golangci-lint config.
+  // Lint with mise's pinned golangci-lint (mise run lint / validate). Disable
+  // the Go extension's own golangci-lint so it does not `go install` a stale
+  // v1 copy into the Go toolchain that shadows the mise-managed v2 binary.
   "go.lintTool": "golangci-lint",
-  "go.lintOnSave": "workspace",
+  "go.lintOnSave": "off",
 
   // Format + organize imports on save for Go files only.
   "[go]": {

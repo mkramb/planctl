@@ -14,3 +14,11 @@ var ClaudeCode []byte
 //
 //go:embed opencode/SKILL.md
 var OpenCode []byte
+
+// ClaudeCommand and OpenCodeCommand are the /planctl slash commands.
+//
+//go:embed claude-code/commands/planctl.md
+var ClaudeCommand []byte
+
+//go:embed opencode/commands/planctl.md
+var OpenCodeCommand []byte

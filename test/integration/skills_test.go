@@ -33,25 +33,36 @@ func TestSkillsInstall(t *testing.T) {
 	result.RequireSuccess(t)
 	assert.Empty(t, result.Stderr)
 	installed := testutil.DecodeJSON[output.SkillsResult](t, result)
-	require.Len(t, installed.Installed, 2)
+	require.Len(t, installed.Installed, 4)
 
-	var claude, opencode string
+	var claudeSkill, claudeCommand, opencodeSkill, opencodeCommand string
 	for _, item := range installed.Installed {
-		switch item.Agent {
-		case "claude":
-			claude = item.Path
-		case "opencode":
-			opencode = item.Path
+		switch item.Agent + "/" + item.Kind {
+		case "claude/skill":
+			claudeSkill = item.Path
+		case "claude/command":
+			claudeCommand = item.Path
+		case "opencode/skill":
+			opencodeSkill = item.Path
+		case "opencode/command":
+			opencodeCommand = item.Path
 		}
 	}
-	assert.Equal(t, filepath.Join(home, ".claude", "skills", "planctl", "SKILL.md"), claude)
-	assert.Equal(t, filepath.Join(home, ".config", "opencode", "skills", "planctl", "SKILL.md"), opencode)
+	assert.Equal(t, filepath.Join(home, ".claude", "skills", "planctl", "SKILL.md"), claudeSkill)
+	assert.Equal(t, filepath.Join(home, ".claude", "commands", "planctl.md"), claudeCommand)
+	assert.Equal(t, filepath.Join(home, ".config", "opencode", "skills", "planctl", "SKILL.md"), opencodeSkill)
+	assert.Equal(t, filepath.Join(home, ".config", "opencode", "command", "planctl.md"), opencodeCommand)
 
-	for _, path := range []string{claude, opencode} {
+	for _, path := range []string{claudeSkill, opencodeSkill} {
 		contents, err := os.ReadFile(path)
 		require.NoError(t, err)
 		assert.Contains(t, string(contents), "name: planctl")
 		assert.Contains(t, string(contents), "implementation.allowed")
+	}
+	for _, path := range []string{claudeCommand, opencodeCommand} {
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(contents), "planctl $ARGUMENTS")
 	}
 }
 
@@ -63,10 +74,14 @@ func TestSkillsInstallSingleAgent(t *testing.T) {
 	result := env.Run(t, "skills", "install", "--agent", "opencode", "--json")
 	result.RequireSuccess(t)
 	installed := testutil.DecodeJSON[output.SkillsResult](t, result)
-	require.Len(t, installed.Installed, 1)
-	assert.Equal(t, "opencode", installed.Installed[0].Agent)
+	require.Len(t, installed.Installed, 2)
+	for _, item := range installed.Installed {
+		assert.Equal(t, "opencode", item.Agent)
+	}
 	assert.FileExists(t, filepath.Join(home, ".config", "opencode", "skills", "planctl", "SKILL.md"))
+	assert.FileExists(t, filepath.Join(home, ".config", "opencode", "command", "planctl.md"))
 	assert.NoFileExists(t, filepath.Join(home, ".claude", "skills", "planctl", "SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(home, ".claude", "commands", "planctl.md"))
 }
 
 func TestSkillsInstallInvalidAgent(t *testing.T) {

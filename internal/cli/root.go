@@ -58,6 +58,7 @@ func newRoot(deps Dependencies, opts *options) *cobra.Command {
 	root.AddCommand(newStatus(deps, opts))
 	root.AddCommand(newFeedback(deps, opts))
 	root.AddCommand(newContext(deps, opts))
+	root.AddCommand(newReview(deps, opts))
 	root.AddCommand(newComplete(deps, opts))
 	root.AddCommand(newSkills(deps, opts))
 	root.AddCommand(&cobra.Command{
