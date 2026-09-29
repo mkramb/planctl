@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
-	"regexp"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -15,29 +13,17 @@ import (
 
 const Filename = ".planctl.yaml"
 
-const minimal = "version: 1\n\nplan:\n  retention: pr-only\n"
+const minimal = "version: 1\n"
 
 type Config struct {
-	Version      int          `yaml:"version"`
-	Review       Review       `yaml:"review"`
-	Repositories Repositories `yaml:"repositories"`
-	Plan         Plan         `yaml:"plan"`
-	Branch       Branch       `yaml:"branch"`
-	PullRequest  PullRequest  `yaml:"pull_request"`
+	Version     int         `yaml:"version"`
+	Review      Review      `yaml:"review"`
+	Branch      Branch      `yaml:"branch"`
+	PullRequest PullRequest `yaml:"pull_request"`
 }
 
 type Review struct {
-	Provider          string `yaml:"provider"`
-	RequiredApprovals int    `yaml:"required_approvals"`
-}
-
-type Repositories struct {
-	Plans string `yaml:"plans"`
-}
-
-type Plan struct {
-	Directory string `yaml:"directory"`
-	Retention string `yaml:"retention"`
+	Provider string `yaml:"provider"`
 }
 
 type Branch struct {
@@ -47,7 +33,6 @@ type Branch struct {
 }
 
 type PullRequest struct {
-	Draft bool   `yaml:"draft"`
 	Title string `yaml:"title"`
 }
 
@@ -62,13 +47,14 @@ func (e *Error) Unwrap() error { return e.Cause }
 
 func defaults() Config {
 	return Config{
-		Review:       Review{Provider: "github", RequiredApprovals: 1},
-		Repositories: Repositories{Plans: "current"},
-		Plan:         Plan{Directory: ".plans", Retention: "pr-only"},
-		Branch:       Branch{Pattern: "plan/{slug}"},
-		PullRequest:  PullRequest{Draft: false, Title: "Plan: {title}"},
+		Review:      Review{Provider: "github"},
+		Branch:      Branch{Pattern: "review/{slug}"},
+		PullRequest: PullRequest{Title: "Review: {title}"},
 	}
 }
+
+// Defaults returns the configuration used when no .planctl.yaml is present.
+func Defaults() Config { return defaults() }
 
 func Parse(data []byte) (Config, error) {
 	cfg := defaults()
@@ -81,35 +67,20 @@ func Parse(data []byte) (Config, error) {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Config{}, &Error{Code: "invalid_config", Message: "configuration must contain exactly one YAML document", Cause: err}
 	}
-	// yaml.v3 converts floats to integers when decoding into int fields. Reject
-	// that coercion: 1.5 approvals must not silently become one approval.
 	var fields struct {
 		Version yaml.Node `yaml:"version"`
-		Review  struct {
-			RequiredApprovals yaml.Node `yaml:"required_approvals"`
-		} `yaml:"review"`
 	}
 	if err := yaml.Unmarshal(data, &fields); err != nil {
 		return Config{}, &Error{Code: "invalid_config", Message: "could not read configuration fields", Cause: err}
 	}
-	for _, field := range []struct {
-		name string
-		node yaml.Node
-	}{
-		{"version", fields.Version},
-		{"review.required_approvals", fields.Review.RequiredApprovals},
-	} {
-		if field.node.Kind != 0 && field.node.Tag != "!!int" {
-			return Config{}, &Error{Code: "invalid_config", Message: field.name + " must be an integer"}
-		}
+	if fields.Version.Kind != 0 && fields.Version.Tag != "!!int" {
+		return Config{}, &Error{Code: "invalid_config", Message: "version must be an integer"}
 	}
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
 }
-
-var repositoryName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$`)
 
 func (c Config) validate() error {
 	if c.Version != 1 {
@@ -119,23 +90,6 @@ func (c Config) validate() error {
 		return &Error{Code: "unsupported_review_provider", Message: fmt.Sprintf("unsupported review provider %q; planctl supports GitHub only", c.Review.Provider)}
 	}
 	invalid := func(message string) error { return &Error{Code: "invalid_config", Message: message} }
-	if c.Review.RequiredApprovals < 1 {
-		return invalid("review.required_approvals must be at least 1")
-	}
-	if c.Repositories.Plans != "current" && (!repositoryName.MatchString(c.Repositories.Plans) || strings.HasSuffix(c.Repositories.Plans, "/.") || strings.HasSuffix(c.Repositories.Plans, "/..")) {
-		return invalid("repositories.plans must be current or an owner/repository name")
-	}
-	if c.Plan.Retention != "pr-only" && c.Plan.Retention != "repository" {
-		return invalid("plan.retention must be pr-only or repository")
-	}
-	if c.Plan.Directory == "" || path.IsAbs(c.Plan.Directory) || strings.ContainsAny(c.Plan.Directory, "\\:\x00") {
-		return invalid("plan.directory must be a relative path inside the repository")
-	}
-	for _, part := range strings.Split(c.Plan.Directory, "/") {
-		if part == ".." || strings.EqualFold(part, ".git") {
-			return invalid("plan.directory must not contain .. or .git")
-		}
-	}
 	if c.Branch.Base != "" && !validBranch(c.Branch.Base) {
 		return invalid("branch.base must be a valid Git branch name")
 	}

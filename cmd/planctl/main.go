@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"os/signal"
-
-	"github.com/mkramb/planctl/internal/cli"
 )
 
 var version = "dev"
@@ -17,7 +15,7 @@ func main() {
 func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return cli.Run(ctx, os.Args[1:], cli.Dependencies{
+	return Run(ctx, os.Args[1:], Dependencies{
 		Dir: ".", Stdout: os.Stdout, Stderr: os.Stderr, Version: version,
 	})
 }

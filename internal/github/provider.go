@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/mkramb/planctl/internal/process"
-	"github.com/mkramb/planctl/internal/review"
 )
 
 const providerName = "github"
@@ -27,17 +26,15 @@ func NewProviderWithCmd(gh Cmd) *Provider {
 	return &Provider{gh: gh}
 }
 
-var _ review.Provider = (*Provider)(nil)
-
 func (p *Provider) ResolveRepository(ctx context.Context, remote string) (string, error) {
-	name, err := RepoFromRemote(remote)
-	if err != nil {
-		return "", err
+	name := remote
+	if parsed, err := RepoFromRemote(remote); err == nil {
+		name = parsed
 	}
 	out, err := p.gh.Run(ctx, "repo", "view", name, "--json", "nameWithOwner")
 	if err != nil {
 		if NotFound(err) {
-			return "", review.ErrRepositoryNotFound
+			return "", ErrRepositoryNotFound
 		}
 		return "", err
 	}
@@ -48,79 +45,75 @@ func (p *Provider) ResolveRepository(ctx context.Context, remote string) (string
 	return repo.NameWithOwner, nil
 }
 
-func (p *Provider) ResolvePlansRepository(ctx context.Context, name string) (string, error) {
-	return "https://github.com/" + name + ".git", nil
-}
-
-func (p *Provider) CreateReview(ctx context.Context, req review.CreateRequest) (review.Review, error) {
+func (p *Provider) CreateReview(ctx context.Context, req CreateRequest) (Review, error) {
 	args := []string{
 		"pr", "create", "--repo", req.Repository,
 		"--head", req.HeadBranch, "--base", req.BaseBranch,
 		"--title", req.Title, "--body", req.Body,
 	}
-	if req.Draft {
-		args = append(args, "--draft")
+	for _, reviewer := range req.Reviewers {
+		args = append(args, "--reviewer", reviewer)
 	}
 	if _, err := p.gh.Run(ctx, args...); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
-			return review.Review{}, review.ErrExists
+			return Review{}, ErrExists
 		}
-		return review.Review{}, err
+		return Review{}, err
 	}
-	return p.FindReview(ctx, review.FindRequest{Repository: req.Repository, HeadBranch: req.HeadBranch})
+	return p.FindReview(ctx, FindRequest{Repository: req.Repository, HeadBranch: req.HeadBranch})
 }
 
-func (p *Provider) FindReview(ctx context.Context, req review.FindRequest) (review.Review, error) {
+func (p *Provider) FindReview(ctx context.Context, req FindRequest) (Review, error) {
 	out, err := p.gh.Run(ctx, "pr", "list", "--repo", req.Repository,
 		"--head", req.HeadBranch, "--state", "all", "--json", "number", "--limit", "50")
 	if err != nil {
-		return review.Review{}, err
+		return Review{}, err
 	}
 	var matches []struct {
 		Number int `json:"number"`
 	}
 	if err := json.Unmarshal([]byte(out), &matches); err != nil {
-		return review.Review{}, fmt.Errorf("could not parse gh pr list output")
+		return Review{}, fmt.Errorf("could not parse gh pr list output")
 	}
 	switch len(matches) {
 	case 0:
-		return review.Review{}, review.ErrNotFound
+		return Review{}, ErrNotFound
 	case 1:
 	default:
-		return review.Review{}, review.ErrAmbiguous
+		return Review{}, ErrAmbiguous
 	}
-	return p.GetReview(ctx, review.Ref{Provider: providerName, Repository: req.Repository, ID: strconv.Itoa(matches[0].Number)})
+	return p.GetReview(ctx, Ref{Provider: providerName, Repository: req.Repository, ID: strconv.Itoa(matches[0].Number)})
 }
 
-func (p *Provider) GetReview(ctx context.Context, ref review.Ref) (review.Review, error) {
+func (p *Provider) GetReview(ctx context.Context, ref Ref) (Review, error) {
 	out, err := p.gh.Run(ctx, "pr", "view", ref.ID, "--repo", ref.Repository, "--json",
-		"number,title,body,url,state,isDraft,headRefName,baseRefName,headRefOid")
+		"number,title,body,url,state,headRefName,baseRefName,headRefOid")
 	if err != nil {
 		if NotFound(err) {
-			return review.Review{}, review.ErrNotFound
+			return Review{}, ErrNotFound
 		}
-		return review.Review{}, err
+		return Review{}, err
 	}
 	var pr prView
 	if err := json.Unmarshal([]byte(out), &pr); err != nil || pr.Number == 0 {
-		return review.Review{}, fmt.Errorf("could not parse gh pr view output")
+		return Review{}, fmt.Errorf("could not parse gh pr view output")
 	}
 	decisions, err := p.decisions(ctx, ref.Repository, ref.ID)
 	if err != nil {
-		return review.Review{}, err
+		return Review{}, err
 	}
-	return review.Review{
-		Ref:   review.Ref{Provider: providerName, Repository: ref.Repository, ID: strconv.Itoa(pr.Number)},
+	return Review{
+		Ref:   Ref{Provider: providerName, Repository: ref.Repository, ID: strconv.Itoa(pr.Number)},
 		Title: pr.Title, Body: pr.Body, URL: pr.URL,
-		State: prState(pr.State), Draft: pr.IsDraft,
+		State:      prState(pr.State),
 		HeadBranch: pr.HeadRefName, BaseBranch: pr.BaseRefName, HeadCommit: pr.HeadRefOid,
 		Decisions: decisions,
 	}, nil
 }
 
-func (p *Provider) Feedback(ctx context.Context, ref review.Ref) ([]review.Feedback, error) {
+func (p *Provider) Feedback(ctx context.Context, ref Ref, head string) ([]Feedback, error) {
 	type stamped struct {
-		item    review.Feedback
+		item    Feedback
 		created string
 	}
 	var all []stamped
@@ -132,19 +125,13 @@ func (p *Provider) Feedback(ctx context.Context, ref review.Ref) ([]review.Feedb
 		if strings.TrimSpace(r.Body) == "" || strings.EqualFold(r.State, "PENDING") {
 			continue
 		}
+		// A review summary submitted against an older revision is stale.
+		if head != "" && r.CommitID != "" && r.CommitID != head {
+			continue
+		}
 		all = append(all, stamped{
-			item:    review.Feedback{ID: "review-" + strconv.FormatInt(r.ID, 10), Author: r.User.Login, Body: r.Body},
+			item:    Feedback{ID: "review-" + strconv.FormatInt(r.ID, 10), Author: r.User.Login, Body: r.Body},
 			created: r.SubmittedAt,
-		})
-	}
-	var issueComments []apiComment
-	if err := apiGet(ctx, p.gh, "repos/"+ref.Repository+"/issues/"+ref.ID+"/comments", &issueComments); err != nil {
-		return nil, err
-	}
-	for _, c := range issueComments {
-		all = append(all, stamped{
-			item:    review.Feedback{ID: "comment-" + strconv.FormatInt(c.ID, 10), Author: c.User.Login, Body: c.Body},
-			created: c.CreatedAt,
 		})
 	}
 	var lineComments []apiReviewComment
@@ -152,14 +139,14 @@ func (p *Provider) Feedback(ctx context.Context, ref review.Ref) ([]review.Feedb
 		return nil, err
 	}
 	for _, c := range lineComments {
-		line := c.Line
-		if line == nil {
-			line = c.OriginalLine
+		// A comment with no current line is outdated (tied to an older revision).
+		if c.Line == nil {
+			continue
 		}
 		all = append(all, stamped{
-			item: review.Feedback{
+			item: Feedback{
 				ID: "line-" + strconv.FormatInt(c.ID, 10), Author: c.User.Login,
-				Body: c.Body, Path: c.Path, Line: line,
+				Body: c.Body, Path: c.Path, Line: c.Line,
 			},
 			created: c.CreatedAt,
 		})
@@ -171,25 +158,25 @@ func (p *Provider) Feedback(ctx context.Context, ref review.Ref) ([]review.Feedb
 		}
 		return all[i].item.ID < all[j].item.ID
 	})
-	result := make([]review.Feedback, len(all))
+	result := make([]Feedback, len(all))
 	for i, entry := range all {
 		result[i] = entry.item
 	}
 	return result, nil
 }
 
-func (p *Provider) decisions(ctx context.Context, repository, id string) ([]review.Decision, error) {
+func (p *Provider) decisions(ctx context.Context, repository, id string) ([]Decision, error) {
 	reviews, err := p.reviews(ctx, repository, id)
 	if err != nil {
 		return nil, err
 	}
-	var decisions []review.Decision
+	var decisions []Decision
 	for _, r := range reviews {
 		state, ok := decisionState(r.State)
 		if !ok {
 			continue
 		}
-		decisions = append(decisions, review.Decision{
+		decisions = append(decisions, Decision{
 			ID: strconv.FormatInt(r.ID, 10), Author: r.User.Login, State: state, CommitID: r.CommitID,
 		})
 	}
@@ -210,7 +197,7 @@ func apiGet[T any](ctx context.Context, gh Cmd, endpoint string, target *[]T) er
 	out, err := gh.Run(ctx, "api", "--paginate", endpoint)
 	if err != nil {
 		if NotFound(err) {
-			return review.ErrNotFound
+			return ErrNotFound
 		}
 		return err
 	}
@@ -225,7 +212,7 @@ func apiGet[T any](ctx context.Context, gh Cmd, endpoint string, target *[]T) er
 	return nil
 }
 
-func (p *Provider) CloseReview(ctx context.Context, ref review.Ref) error {
+func (p *Provider) CloseReview(ctx context.Context, ref Ref) error {
 	_, err := p.gh.Run(ctx, "pr", "close", ref.ID, "--repo", ref.Repository)
 	if err != nil {
 		return err
@@ -233,35 +220,36 @@ func (p *Provider) CloseReview(ctx context.Context, ref review.Ref) error {
 	return nil
 }
 
-func (p *Provider) MergeReview(ctx context.Context, ref review.Ref) error {
-	_, err := p.gh.Run(ctx, "pr", "merge", ref.ID, "--repo", ref.Repository, "--merge")
-	if err != nil {
-		return err
+func (p *Provider) AddReviewers(ctx context.Context, ref Ref, reviewers []string) error {
+	for _, reviewer := range reviewers {
+		if _, err := p.gh.Run(ctx, "pr", "edit", ref.ID, "--repo", ref.Repository, "--add-reviewer", reviewer); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func prState(state string) review.State {
+func prState(state string) State {
 	switch strings.ToUpper(state) {
 	case "MERGED":
-		return review.Merged
+		return Merged
 	case "CLOSED":
-		return review.Closed
+		return Closed
 	default:
-		return review.Open
+		return Open
 	}
 }
 
-func decisionState(state string) (review.DecisionState, bool) {
+func decisionState(state string) (DecisionState, bool) {
 	switch strings.ToUpper(state) {
 	case "APPROVED":
-		return review.Approved, true
+		return Approved, true
 	case "CHANGES_REQUESTED":
-		return review.ChangesRequested, true
+		return ChangesRequested, true
 	case "COMMENTED":
-		return review.Commented, true
+		return Commented, true
 	case "DISMISSED":
-		return review.Dismissed, true
+		return Dismissed, true
 	default:
 		return "", false
 	}

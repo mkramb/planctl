@@ -36,11 +36,6 @@ func (c *Client) CheckBranch(ctx context.Context, branch string) error {
 	return err
 }
 
-func (c *Client) TreeContains(ctx context.Context, commit, path string) (bool, error) {
-	result, err := c.Run(ctx, "ls-tree", "-z", "--full-tree", commit, "--", path)
-	return result.Stdout != "", err
-}
-
 func exitedWith(err error, code int) bool {
 	var commandErr *process.Error
 	return errors.As(err, &commandErr) && commandErr.ExitCode == code &&

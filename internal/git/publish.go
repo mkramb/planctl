@@ -8,11 +8,6 @@ import (
 
 var ErrPushRejected = errors.New("remote rejected the plan branch update")
 
-func (c *Client) Branches(ctx context.Context) ([]string, error) {
-	result, err := c.Run(ctx, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/")
-	return strings.Fields(result.Stdout), err
-}
-
 func (c *Client) Origin(ctx context.Context) (string, error) {
 	fetch, err := c.value(ctx, "remote", "get-url", "origin")
 	if err != nil {
@@ -28,11 +23,6 @@ func (c *Client) Origin(ctx context.Context) (string, error) {
 	return fetch, nil
 }
 
-// RemoteURL returns a named remote's URL without the fetch/push consistency check.
-func (c *Client) RemoteURL(ctx context.Context, name string) (string, error) {
-	return c.value(ctx, "remote", "get-url", name)
-}
-
 func (c *Client) ChangedFiles(ctx context.Context, base, head string) ([]string, error) {
 	result, err := c.Run(ctx, "diff", "--name-only", "--no-renames", "-z", base+"..."+head, "--")
 	return splitPaths(result.Stdout), err
@@ -43,61 +33,76 @@ func (c *Client) StagedFiles(ctx context.Context) ([]string, error) {
 	return splitPaths(result.Stdout), err
 }
 
-// PlanDirty reports staged, modified, or untracked state for one path.
-func (c *Client) PlanDirty(ctx context.Context, path string) (bool, error) {
-	result, err := c.Run(ctx, "status", "--porcelain", "-z", "--", path)
-	return result.Stdout != "", err
-}
-
-// Dirty reports any staged, modified, or untracked state in the worktree.
-func (c *Client) Dirty(ctx context.Context) (bool, error) {
-	result, err := c.Run(ctx, "status", "--porcelain", "-z")
-	return result.Stdout != "", err
-}
-
-// DeleteRemoteBranch removes a remote branch; an already-absent branch is success.
-func (c *Client) DeleteRemoteBranch(ctx context.Context, remote, branch string) error {
-	result, err := c.Run(ctx, "push", "--porcelain", "--", remote, ":refs/heads/"+branch)
-	if err != nil && strings.Contains(result.Stderr, "remote ref does not exist") {
-		return nil
-	}
-	return err
-}
-
-func (c *Client) RemoveWorktree(ctx context.Context, path string) error {
-	_, err := c.Run(ctx, "worktree", "remove", "--", path)
-	return err
-}
-
-// HistoryFiles also catches unrelated work that was committed and later reverted.
-// Merge commits are rejected: merging implementation work into a plan branch can
-// expose that history even when the final diff only contains a plan.
-func (c *Client) HistoryFiles(ctx context.Context, base, head string) ([]string, error) {
-	merges, err := c.value(ctx, "rev-list", "--merges", base+".."+head)
-	if err != nil {
-		return nil, err
-	}
-	if merges != "" {
-		return nil, errors.New("plan branch contains merge commits")
-	}
-	commits, err := c.value(ctx, "rev-list", base+".."+head)
+// StatusFiles lists staged, modified, untracked, and deleted paths, optionally
+// limited to a pathspec. Paths are relative to the repository root and contain
+// no rename pairs.
+func (c *Client) StatusFiles(ctx context.Context, pathspec ...string) ([]string, error) {
+	args := append([]string{"status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all", "--"}, pathspec...)
+	result, err := c.Run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
 	var paths []string
-	for _, commit := range strings.Fields(commits) {
-		result, err := c.Run(ctx, "diff-tree", "--root", "--no-commit-id", "--name-only", "--no-renames", "-r", "-z", commit, "--")
-		if err != nil {
-			return nil, err
+	for _, entry := range strings.Split(result.Stdout, "\x00") {
+		if len(entry) < 4 {
+			continue
 		}
-		paths = append(paths, splitPaths(result.Stdout)...)
+		paths = append(paths, entry[3:])
 	}
 	return paths, nil
 }
 
-func (c *Client) CommitOnly(ctx context.Context, message, path string) error {
-	_, err := c.Run(ctx, "commit", "--only", "-m", message, "--", path)
-	return err
+// ListFiles lists tracked and untracked (but not ignored) files under a
+// pathspec, relative to the repository root.
+func (c *Client) ListFiles(ctx context.Context, pathspec string) ([]string, error) {
+	result, err := c.Run(ctx, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", pathspec)
+	return splitPaths(result.Stdout), err
+}
+
+// DiffersFrom reports whether any of the given paths' working-tree content
+// differs from their blob in commit, including files that are untracked here
+// but were committed to the review branch, and files deleted locally.
+func (c *Client) DiffersFrom(ctx context.Context, commit string, files []string) (bool, error) {
+	for _, file := range files {
+		working, wExists, err := c.workingBlob(ctx, file)
+		if err != nil {
+			return false, err
+		}
+		committed, cExists, err := c.treeBlob(ctx, commit, file)
+		if err != nil {
+			return false, err
+		}
+		if wExists != cExists || working != committed {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// workingBlob returns the hash of the file's working-tree content, reporting
+// whether the file exists.
+func (c *Client) workingBlob(ctx context.Context, path string) (string, bool, error) {
+	result, err := c.Run(ctx, "hash-object", "--", path)
+	if err != nil {
+		if exitedWith(err, 128) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return strings.TrimSpace(result.Stdout), true, nil
+}
+
+// treeBlob returns the hash of the file's blob in commit, reporting whether the
+// path exists at that commit.
+func (c *Client) treeBlob(ctx context.Context, commit, path string) (string, bool, error) {
+	result, err := c.Run(ctx, "rev-parse", "--verify", "--quiet", "--end-of-options", commit+":"+path)
+	if err != nil {
+		if exitedWith(err, 1) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return strings.TrimSpace(result.Stdout), true, nil
 }
 
 func (c *Client) PushPlan(ctx context.Context, commit, branch string) error {

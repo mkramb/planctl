@@ -8,7 +8,6 @@ type prView struct {
 	Body        string `json:"body"`
 	URL         string `json:"url"`
 	State       string `json:"state"` // OPEN, CLOSED, MERGED
-	IsDraft     bool   `json:"isDraft"`
 	HeadRefName string `json:"headRefName"`
 	BaseRefName string `json:"baseRefName"`
 	HeadRefOid  string `json:"headRefOid"`
@@ -29,13 +28,6 @@ type apiReview struct {
 	CommitID    string  `json:"commit_id"`
 	Body        string  `json:"body"`
 	SubmittedAt string  `json:"submitted_at"`
-}
-
-type apiComment struct {
-	ID        int64   `json:"id"`
-	User      apiUser `json:"user"`
-	Body      string  `json:"body"`
-	CreatedAt string  `json:"created_at"`
 }
 
 type apiReviewComment struct {

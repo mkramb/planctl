@@ -10,9 +10,9 @@ import (
 )
 
 type Metadata struct {
-	Version                  int    `yaml:"version"`
-	ID                       string `yaml:"id"`
-	ImplementationRepository string `yaml:"implementation-repository"`
+	Version   int      `yaml:"version"`
+	ID        string   `yaml:"id"`
+	Reviewers []string `yaml:"reviewers,omitempty"`
 }
 
 func (m Metadata) Body() (string, error) {
@@ -20,7 +20,7 @@ func (m Metadata) Body() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Implementation plan for review before coding begins.\n\n<!-- planctl\n" + string(data) + "-->\n", nil
+	return "Files under review. Approve to mark them ready.\n\n<!-- planctl\n" + string(data) + "-->\n", nil
 }
 
 func ParseMetadata(body string) (Metadata, error) {
@@ -45,7 +45,7 @@ func ParseMetadata(body string) (Metadata, error) {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return Metadata{}, invalid
 	}
-	if metadata.Version != 1 || metadata.ID == "" || metadata.ImplementationRepository == "" {
+	if metadata.Version != 1 || metadata.ID == "" {
 		return Metadata{}, invalid
 	}
 	var fields struct {

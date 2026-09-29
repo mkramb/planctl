@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
+	"strings"
 )
 
 type Request struct {
@@ -51,6 +53,52 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) Unwrap() error { return e.Cause }
+
+// Logging wraps an Executor and writes a diagnostic line for each command to w
+// before it runs. Verbose mode is explicitly opt-in, so the command line is safe
+// to surface for debugging; the environment is never logged because it may carry
+// credentials.
+func Logging(exec Executor, w io.Writer) Executor {
+	if exec == nil || w == nil {
+		return exec
+	}
+	return &logging{executor: exec, w: w}
+}
+
+type logging struct {
+	executor Executor
+	w        io.Writer
+}
+
+func (l *logging) Run(ctx context.Context, req Request) (Result, error) {
+	_, _ = fmt.Fprintf(l.w, "exec %s %s\n", req.Executable, quoteArgs(req.Args))
+	if req.Dir != "" {
+		_, _ = fmt.Fprintf(l.w, "  in %s\n", req.Dir)
+	}
+	result, err := l.executor.Run(ctx, req)
+	if err != nil {
+		_, _ = fmt.Fprintf(l.w, "  error: %v\n", err)
+	}
+	return result, err
+}
+
+func quoteArgs(args []string) string {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		quoted[i] = quoteArg(arg)
+	}
+	return strings.Join(quoted, " ")
+}
+
+func quoteArg(arg string) string {
+	if arg == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(arg, " \t\n'\"\\$`;&|<>*?()[]{}!#~") {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+}
 
 func (Runner) Run(ctx context.Context, req Request) (Result, error) {
 	cmd := exec.CommandContext(ctx, req.Executable, req.Args...)

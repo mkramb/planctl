@@ -2,69 +2,64 @@
 
 ## Overview
 
-```text
-              +------------+
-              | coding     |
-              | agent/human|
-              +-----+------+
-                    |
-                    v
-              +------------+
-              |  planctl   |
-              +--+------+--+
-                 |      |
-                 v      v
-             +-----+  +-----------------+
-             | Git |  | ReviewProvider  |
-             +-----+  +-------+---------+
-                              |
-                       +------+------+
-                       v             v
-                  +---------+   +--------+
-                  |  GitHub |   |  mock  |
-                  |  (prod) |   | (tests)|
-                  +---------+   +--------+
+`planctl` sends files to a GitHub pull request for review and waits for a
+decision. It drives the locally installed `git` and `gh` CLIs; Git and GitHub
+hold all state, `.planctl.yaml` holds only optional config, and there is no
+local database or server.
+
+GitHub is the only review provider. The production code path in
+`internal/github` is what everything (including tests) exercises; the
+integration-test mock is a stateful in-memory `gh` fake that lives next to the
+provider in `internal/github/mock.go`.
+
+## Structure
+
+```
+cmd/planctl/     the CLI (package main) and its co-located tests
+internal/
+  config/        config discovery, defaults, validation, init
+  git/           the user's real git
+  github/        the GitHub provider + review model + in-memory mock
+  output/        typed results rendered as text or JSON
+  plan/          file selection, worktrees, and the review lifecycle
+  process/       runs external programs; the only place that execs
+integrations/    the /planctl slash commands shipped to agents
 ```
 
-Git and GitHub hold the state. `.planctl.yaml` holds only config.
-There is no local database or server.
+The flow is: Cobra command -> operation -> git / github -> typed result -> text
+or JSON output.
 
-`ReviewProvider` in the diagram is a testing seam, not a plugin system: the
-production implementation is GitHub, and the "mock" branch is an in-memory fake
-that lets integration tests run offline.
+## Configuration
 
-## Packages
+`planctl` works with no configuration. When no `.planctl.yaml` is present it
+uses the defaults below; `planctl init` writes a file you can customize.
 
-The flow is: Cobra command -> operation -> Git / ReviewProvider -> typed result
--> text or JSON output.
+```yaml
+version: 1
+review:
+  provider: github      # always github; any other value is an error
+branch:
+  base: ""              # default branch when empty
+  pattern: "review/{slug}"
+pull_request:
+  title: "Review: {title}"
+```
 
-- `cmd/planctl` - startup and exit code only.
-- `internal/cli` - commands, flags, wiring.
-- `internal/config` - config discovery, defaults, validation, and initialization.
-- `internal/plan` - plan identity, templates, and managed worktrees.
-- `internal/process` - runs external programs; the only place that execs.
-- `internal/git` - the user's real `git`.
-- `internal/review` - review types and the `Provider` interface (a test seam).
-- `internal/output` - shared results rendered as text or JSON.
-- `internal/github` - GitHub details and `gh` calls.
+Config is searched upward from the working directory to the Git worktree root.
+The nearest file wins; invalid files are errors, not silently skipped. `--config`
+selects an explicit file. Configuration holds settings only, never review IDs or
+status.
 
-## Rules
+## File selection and publishing
 
-- planctl supports GitHub only. The `Provider` interface exists so tests can use
-  a fake; it is not a plugin system.
-- GitHub-specific code stays in `internal/github`.
-- Everything is reproducible from config + Git + GitHub.
-
-## Plan workflow
-
-- Each plan gets its own managed Git worktree, so plan edits never touch the
-  user's working checkout. The plan branch starts from the base branch, not the
-  user's current branch.
-- Plan identity = repository + slug (e.g. `add-sso` -> branch `plan/add-sso`,
-  file `.plans/add-sso.md`). Commands take `--plan <slug>`; if no plan can be
-  picked automatically, that's an error.
-- `publish` commits only the plan file, pushes, and creates or updates one
-  review per plan. Reviews are created ready for review, not drafts.
+- Arguments may be files, folders (expanded to their tracked and untracked,
+  non-ignored files), or omitted entirely (auto-detect changed files from
+  `git status`).
+- The branch is `branch.pattern` (default `review/{slug}`), where the slug comes
+  from the first selected file's base name.
+- The selected files are copied into an isolated worktree at the base commit,
+  committed, and pushed. Files previously published but no longer selected are
+  removed. The caller's checkout is never touched.
 
 Worktrees live at:
 
@@ -72,26 +67,32 @@ Worktrees live at:
 <user cache>/planctl/worktrees/<repo-name>-<repo-key>/<slug>/
 ```
 
-The key is a hash of Git's shared repository directory. Worktrees from one clone
-reuse the same plan location; separate clones get separate locations. Commands
-return the full editable path. Per-plan OS locks prevent concurrent writes and
-release when the process exits. Unpublished edits are never discarded.
+The key is a hash of Git's shared repository directory. Per-slug OS locks
+prevent concurrent writes; republishing reuses the same worktree and review.
 
-`create` can retry after a branch or worktree was created but the template was
-not written. It refuses unrelated paths and branches containing other work.
-If Git still lists a missing worktree, repair that registration before retrying.
+## Review loop and approval
 
-## Reviews and approval
+`planctl` publishes, prints the pull request URL, and blocks until a decision.
+It returns when any feedback is submitted (a comment or a change request), or
+when the review is approved. Comments tied to an older revision are filtered
+out, so each round only surfaces current feedback.
 
-- Reviewers, approvals, and requested changes all happen on GitHub.
-  `planctl` only reads them.
-- Implementation is allowed when: the review is open and not a draft, enough
-  approvals exist for the current revision, no unresolved change request, and
-  the local plan matches what was published. A new publish needs fresh approvals.
+- **No reviewers**: the agent revises the files automatically and re-runs.
+- **With `--reviewer`**: the agent asks the user to apply or ignore each comment.
 
-## Completion
+The review is approved when it is open, the required approvals exist for the
+current revision, and no change request remains. The required count is the
+number of requested reviewers, or one when none are requested ("just us"). A new
+publish pushes a new revision, so previous approvals no longer count. Comment-
+only reviews do not erase decisions; dismissed reviews do.
 
-- `pr-only` retention: `complete` closes the review without merging.
-- `repository` retention: `complete` merges the plan into the base branch.
-- `--prune-remote` (off by default) deletes the remote plan branch afterwards.
-  Safe to rerun; already-finished steps are skipped.
+## Retries
+
+- No changes: reuse the commit and review.
+- Push fails: keep local commits for a retry; never force-push.
+- Review creation fails: look it up again in case only the response was lost.
+- Closed or merged review: stop rather than reopen or replace it.
+- Conflicting or ambiguous review identity: stop rather than guess.
+
+Each review description carries a versioned metadata block with the slug and
+reviewer list; republishing preserves the description and feedback.

@@ -64,6 +64,25 @@ func (l Loader) Load(ctx context.Context, dir, override string) (Loaded, error) 
 	return Loaded{Location: location, Config: cfg}, nil
 }
 
+// LoadOrDefaults returns the discovered configuration, or defaults rooted at
+// the repository when no .planctl.yaml exists. An explicit override that is
+// missing is still an error.
+func (l Loader) LoadOrDefaults(ctx context.Context, dir, override string) (Loaded, error) {
+	loaded, err := l.Load(ctx, dir, override)
+	if err == nil {
+		return loaded, nil
+	}
+	var cfgErr *Error
+	if override != "" || !errors.As(err, &cfgErr) || cfgErr.Code != "config_not_found" {
+		return Loaded{}, err
+	}
+	location, _, err := l.locate(ctx, dir, "")
+	if err != nil {
+		return Loaded{}, err
+	}
+	return Loaded{Location: location, Config: Defaults()}, nil
+}
+
 // Init never overwrites a file, directory, or symlink. O_EXCL also protects
 // against another invocation creating the same file between discovery and write.
 func (l Loader) Init(ctx context.Context, dir, override string) (Location, error) {

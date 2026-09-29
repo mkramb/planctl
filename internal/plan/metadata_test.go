@@ -11,7 +11,7 @@ import (
 
 func TestMetadataRoundTripAndInvalidVersions(t *testing.T) {
 	t.Parallel()
-	want := plan.Metadata{Version: 1, ID: "add-sso", ImplementationRepository: "acme/payments"}
+	want := plan.Metadata{Version: 1, ID: "add-sso", Reviewers: []string{"alice", "bob"}}
 	body, err := want.Body()
 	require.NoError(t, err)
 	got, err := plan.ParseMetadata("Human introduction.\n" + body + "\nHuman notes.")

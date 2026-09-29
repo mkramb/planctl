@@ -5,146 +5,165 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mkramb/planctl/internal/config"
 	"github.com/mkramb/planctl/internal/git"
 )
 
+// PublishRequest carries everything needed to select files and publish them.
 type PublishRequest struct {
 	Dir        string
 	ConfigPath string
-	PlanID     string
+	// Files are explicit file or directory paths relative to the working
+	// directory. When empty, changed files are auto-detected.
+	Files     []string
+	Title     string
+	Base      string
+	Reviewers []string
 }
 
-type selection struct {
+// submission is the resolved, publishable state for one review.
+type submission struct {
 	plan       Plan
 	config     config.Loaded
-	client     *git.Client
+	source     *git.Client
+	sourceRoot string
 	baseCommit string
-	implRepo   string
-	plansRepo  string
-	dedicated  bool
+	repository string
 }
 
-func (s Service) resolve(ctx context.Context, req PublishRequest) (selection, error) {
+func (s Service) resolve(ctx context.Context, req PublishRequest) (submission, error) {
 	loaded, err := s.loadConfiguration(ctx, req.Dir, req.ConfigPath)
 	if err != nil {
-		return selection{}, err
+		return submission{}, err
 	}
-	t, err := s.resolveTarget(ctx, loaded, true)
+	root := loaded.RepositoryRoot
+	source := git.New(s.Executor, root, s.Env)
+
+	base := req.Base
+	if base == "" {
+		base = loaded.Config.Branch.Base
+	}
+	baseName, baseCommit, err := resolveBase(ctx, source, base)
 	if err != nil {
-		return selection{}, err
+		return submission{}, err
 	}
-	client := t.plans
-	root, err := s.workspaceRoot(ctx, client)
+
+	files, err := s.selectFiles(ctx, source, root, req.Dir, req.Files)
 	if err != nil {
-		return selection{}, err
+		return submission{}, err
 	}
-	id := req.PlanID
-	if id != "" && !validID(id) {
-		return selection{}, &Error{Code: "invalid_plan", Message: "--plan must be an existing plan slug, not a title or path"}
+
+	title := req.Title
+	if title == "" {
+		title = filepath.Base(files[0])
 	}
-	pattern := loaded.Config.Branch.Pattern
-	if id == "" {
-		caller := git.New(s.Executor, req.Dir, s.Env)
-		common, callerErr := caller.CommonDirectory(ctx)
-		want, err := client.CommonDirectory(ctx)
-		if err != nil {
-			return selection{}, err
-		}
-		if callerErr == nil && common == want {
-			branch, err := caller.CurrentBranch(ctx)
-			if err != nil {
-				return selection{}, err
-			}
-			id = t.branchID(pattern, branch)
-		}
+	slug := slugFor(files[0])
+	branch := strings.ReplaceAll(loaded.Config.Branch.Pattern, "{slug}", slug)
+	if err := source.CheckBranch(ctx, branch); err != nil {
+		return submission{}, &Error{Code: "invalid_branch", Message: "branch pattern and file name do not produce a valid Git branch name", Cause: err}
 	}
-	if id == "" {
-		branches, err := client.Branches(ctx)
-		if err != nil {
-			return selection{}, err
-		}
-		var candidates []string
-		for _, branch := range branches {
-			if slug := t.branchID(pattern, branch); slug != "" {
-				candidates = append(candidates, slug)
-			}
-		}
-		switch len(candidates) {
-		case 0:
-			return selection{}, &Error{Code: "plan_required", Message: "no local plan found; run planctl create first"}
-		case 1:
-			id = candidates[0]
-		default:
-			return selection{}, &Error{Code: "ambiguous_plan", Message: "multiple plans found; use --plan with one of: " + strings.Join(candidates, ", ")}
-		}
+
+	workspaceRoot, err := s.workspaceRoot(ctx, source)
+	if err != nil {
+		return submission{}, err
 	}
+	if inside(root, workspaceRoot) {
+		return submission{}, &Error{Code: "invalid_workspace", Message: "the user cache must be outside the repository checkout"}
+	}
+
+	repository, err := s.implRepoName(ctx, source)
+	if err != nil {
+		return submission{}, err
+	}
+
 	p := Plan{
-		ID: id, Branch: t.branchFor(pattern, id),
-		Path:          t.pathFor(loaded.Config.Plan.Directory, id),
-		WorkspacePath: filepath.Join(root, id),
+		ID: slug, Title: title, Branch: branch, Base: baseName,
+		Files: files, WorkspacePath: filepath.Join(workspaceRoot, slug),
 	}
-	p.AbsolutePath = filepath.Join(p.WorkspacePath, filepath.FromSlash(p.Path))
-	worktrees, err := client.Worktrees(ctx)
-	if err != nil {
-		return selection{}, err
-	}
-	found := false
-	for _, worktree := range worktrees {
-		if worktree.Branch != p.Branch {
-			continue
-		}
-		if filepath.Clean(worktree.Path) != p.WorkspacePath {
-			return selection{}, &Error{Code: "workspace_conflict", Message: fmt.Sprintf("plan branch is checked out outside its managed workspace: %s", worktree.Path)}
-		}
-		found = !worktree.Prunable
-	}
-	if !found {
-		return selection{}, &Error{Code: "workspace_missing", Message: "plan has no available managed worktree; create the plan or repair its worktree first"}
-	}
-	base, baseCommit, err := resolveBase(ctx, client, loaded.Config.Branch.Base)
-	if err != nil {
-		return selection{}, err
-	}
-	p.Base = base
-	return selection{
-		plan: p, config: loaded, client: client, baseCommit: baseCommit,
-		implRepo: t.implRepo, plansRepo: t.plansRepo, dedicated: t.dedicated,
+	return submission{
+		plan: p, config: loaded, source: source, sourceRoot: root,
+		baseCommit: baseCommit, repository: repository,
 	}, nil
 }
 
-func validID(id string) bool {
-	slug, err := Slug(id)
-	return err == nil && slug == id
+// implRepoName resolves the origin remote to an owner/repository name.
+func (s Service) implRepoName(ctx context.Context, impl *git.Client) (string, error) {
+	if s.Provider == nil {
+		return "", &Error{Code: "provider_unavailable", Message: "GitHub integration is not implemented yet"}
+	}
+	remote, err := impl.Origin(ctx)
+	if err != nil {
+		return "", &Error{Code: "invalid_remote", Message: "configure origin with the same single fetch and push URL", Cause: err}
+	}
+	name, err := s.Provider.ResolveRepository(ctx, remote)
+	if err != nil {
+		return "", &Error{Code: "repository_lookup_failed", Message: "could not resolve origin's review repository", Cause: err}
+	}
+	return name, nil
 }
 
-// Plan text is not validated. A first-line heading supplies the display title;
-// otherwise use the slug. Files and their parent directories cannot be symlinks.
-func readPlan(p Plan) (string, error) {
-	if !inside(p.WorkspacePath, p.AbsolutePath) {
-		return "", &Error{Code: "unsafe_path", Message: "plan path escapes its workspace"}
+// selectFiles resolves explicit file/directory arguments, or auto-detects
+// changed files when no arguments are given. Results are repository-root
+// relative, deduplicated, and sorted.
+func (s Service) selectFiles(ctx context.Context, source *git.Client, root, dir string, args []string) ([]string, error) {
+	seen := map[string]bool{}
+	var files []string
+	add := func(path string) {
+		path = filepath.ToSlash(path)
+		if path != "" && !seen[path] {
+			seen[path] = true
+			files = append(files, path)
+		}
 	}
-	for current := p.AbsolutePath; ; current = filepath.Dir(current) {
-		info, err := os.Lstat(current)
+	if len(args) == 0 {
+		changed, err := source.StatusFiles(ctx)
 		if err != nil {
-			return "", &Error{Code: "plan_not_found", Message: "could not read the plan file at " + p.AbsolutePath, Cause: err}
+			return nil, err
 		}
-		if info.Mode()&os.ModeSymlink != 0 || (current == p.AbsolutePath && !info.Mode().IsRegular()) || (current != p.AbsolutePath && !info.IsDir()) {
-			return "", &Error{Code: "unsafe_path", Message: "plan must be a regular file inside real workspace directories"}
+		for _, path := range changed {
+			add(path)
 		}
-		if current == p.WorkspacePath {
-			break
+	} else {
+		for _, arg := range args {
+			abs := arg
+			if !filepath.IsAbs(abs) {
+				abs = filepath.Join(dir, arg)
+			}
+			abs, err := filepath.Abs(abs)
+			if err != nil {
+				return nil, err
+			}
+			abs, err = filepath.EvalSymlinks(abs)
+			if err != nil {
+				return nil, &Error{Code: "path_not_found", Message: fmt.Sprintf("path %q does not exist", arg)}
+			}
+			rel, err := filepath.Rel(root, abs)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+				return nil, &Error{Code: "invalid_path", Message: fmt.Sprintf("path %q is outside the repository", arg)}
+			}
+			info, err := os.Stat(abs)
+			if err != nil {
+				return nil, &Error{Code: "path_not_found", Message: fmt.Sprintf("path %q does not exist", arg)}
+			}
+			if info.IsDir() {
+				listed, err := source.ListFiles(ctx, rel)
+				if err != nil {
+					return nil, err
+				}
+				for _, path := range listed {
+					add(path)
+				}
+			} else {
+				add(rel)
+			}
 		}
 	}
-	data, err := os.ReadFile(p.AbsolutePath)
-	if err != nil {
-		return "", err
+	if len(files) == 0 {
+		return nil, &Error{Code: "no_files", Message: "no files selected; pass file or directory paths, or make changes first"}
 	}
-	first, _, _ := strings.Cut(strings.TrimSpace(string(data)), "\n")
-	if strings.HasPrefix(first, "# ") && strings.TrimSpace(first[2:]) != "" {
-		return strings.TrimSpace(first[2:]), nil
-	}
-	return p.ID, nil
+	sort.Strings(files)
+	return files, nil
 }

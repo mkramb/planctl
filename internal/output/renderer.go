@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/mkramb/planctl/internal/config"
+	"github.com/mkramb/planctl/internal/github"
 	"github.com/mkramb/planctl/internal/plan"
-	"github.com/mkramb/planctl/internal/review"
 )
 
 const Version = 1
@@ -34,43 +34,27 @@ type InitResult struct {
 	Config  config.Location `json:"config"`
 }
 
-type CreateResult struct {
-	Version int       `json:"version"`
-	Plan    plan.Plan `json:"plan"`
-}
-
 type ReviewResult struct {
 	ID         string       `json:"id"`
 	Provider   string       `json:"provider"`
 	Repository string       `json:"repository"`
 	URL        string       `json:"url"`
-	State      review.State `json:"state"`
-	Draft      bool         `json:"draft"`
+	State      github.State `json:"state"`
 }
 
-type PublishResult struct {
-	Version int          `json:"version"`
-	Plan    plan.Plan    `json:"plan"`
-	Review  ReviewResult `json:"review"`
-	Commit  string       `json:"commit"`
-}
-
-type PlanStatusResult struct {
-	ID     string      `json:"id"`
-	Status plan.Status `json:"status"`
+type PlanResult struct {
+	ID            string      `json:"id"`
+	Title         string      `json:"title"`
+	Branch        string      `json:"branch"`
+	Base          string      `json:"base"`
+	Files         []string    `json:"files"`
+	WorkspacePath string      `json:"workspace_path"`
+	Status        plan.Status `json:"status"`
 }
 
 type ApprovalResult struct {
 	Current  int `json:"current"`
 	Required int `json:"required"`
-}
-
-type StatusResult struct {
-	Version       int              `json:"version"`
-	Plan          PlanStatusResult `json:"plan"`
-	Review        *ReviewResult    `json:"review,omitempty"`
-	Approval      ApprovalResult   `json:"approval"`
-	FeedbackCount int              `json:"feedback_count"`
 }
 
 type FeedbackItem struct {
@@ -81,49 +65,17 @@ type FeedbackItem struct {
 	Line   *int   `json:"line,omitempty"`
 }
 
-type FeedbackResult struct {
-	Version  int            `json:"version"`
-	Plan     plan.Plan      `json:"plan"`
-	Status   plan.Status    `json:"status"`
-	Review   *ReviewResult  `json:"review,omitempty"`
-	Feedback []FeedbackItem `json:"feedback"`
-}
-
-type ContextPlanResult struct {
-	ID            string      `json:"id"`
-	Title         string      `json:"title"`
-	Path          string      `json:"path"`
-	Status        plan.Status `json:"status"`
-	WorkspacePath string      `json:"workspace_path"`
-	AbsolutePath  string      `json:"absolute_path"`
-}
-
-type RepositoriesResult struct {
-	Implementation string `json:"implementation"`
-	Plans          string `json:"plans"`
-}
-
-type ImplementationResult struct {
-	Allowed        bool     `json:"allowed"`
-	Base           string   `json:"base"`
-	BlockedReasons []string `json:"blocked_reasons"`
-}
-
-type ContextResult struct {
-	Version        int                  `json:"version"`
-	Plan           ContextPlanResult    `json:"plan"`
-	Repositories   RepositoriesResult   `json:"repositories"`
-	Review         *ReviewResult        `json:"review,omitempty"`
-	Implementation ImplementationResult `json:"implementation"`
-}
-
-type CompleteResult struct {
-	Version          int               `json:"version"`
-	Plan             ContextPlanResult `json:"plan"`
-	Review           ReviewResult      `json:"review"`
-	Retention        string            `json:"retention"`
-	PrunedRemote     bool              `json:"pruned_remote"`
-	WorkspaceRemoved bool              `json:"workspace_removed"`
+// OutcomeResult is the single result of the review loop.
+type OutcomeResult struct {
+	Version        int            `json:"version"`
+	Plan           PlanResult     `json:"plan"`
+	Review         *ReviewResult  `json:"review,omitempty"`
+	Status         plan.Status    `json:"status"`
+	Approval       ApprovalResult `json:"approval"`
+	Reviewers      []string       `json:"reviewers"`
+	Feedback       []FeedbackItem `json:"feedback"`
+	Allowed        bool           `json:"allowed"`
+	BlockedReasons []string       `json:"blocked_reasons"`
 }
 
 type SkillInstall struct {
@@ -136,28 +88,19 @@ type SkillsResult struct {
 	Installed []SkillInstall `json:"installed"`
 }
 
-func NewCompleteResult(c plan.Completion) CompleteResult {
-	return CompleteResult{
-		Version: Version,
-		Plan: ContextPlanResult{
-			ID: c.Plan.ID, Title: c.Plan.Title, Path: c.Plan.Path, Status: statusForState(c.Review.State),
-			WorkspacePath: c.Plan.WorkspacePath, AbsolutePath: c.Plan.AbsolutePath,
-		},
-		Review:           ReviewResult{ID: c.Review.Ref.ID, Provider: c.Review.Ref.Provider, Repository: c.Review.Ref.Repository, URL: c.Review.URL, State: c.Review.State, Draft: c.Review.Draft},
-		Retention:        c.Retention,
-		PrunedRemote:     c.PrunedRemote,
-		WorkspaceRemoved: c.WorkspaceRemoved,
-	}
+type UninstallResult struct {
+	Version int            `json:"version"`
+	Removed []SkillInstall `json:"removed"`
 }
 
-func statusForState(state review.State) plan.Status {
-	switch state {
-	case review.Merged:
-		return plan.StatusMerged
-	case review.Closed:
-		return plan.StatusClosed
-	default:
-		return plan.StatusInReview
+func planResult(p plan.Plan, status plan.Status) PlanResult {
+	files := p.Files
+	if files == nil {
+		files = []string{}
+	}
+	return PlanResult{
+		ID: p.ID, Title: p.Title, Branch: p.Branch, Base: p.Base, Files: files,
+		WorkspacePath: p.WorkspacePath, Status: status,
 	}
 }
 
@@ -167,44 +110,27 @@ func reviewResult(eval plan.Evaluation) *ReviewResult {
 	}
 	return &ReviewResult{
 		ID: eval.Review.Ref.ID, Provider: eval.Review.Ref.Provider, Repository: eval.Review.Ref.Repository, URL: eval.Review.URL,
-		State: eval.Review.State, Draft: eval.Review.Draft,
+		State: eval.Review.State,
 	}
 }
 
-func NewStatusResult(eval plan.Evaluation) StatusResult {
-	return StatusResult{
-		Version:       Version,
-		Plan:          PlanStatusResult{ID: eval.Plan.ID, Status: eval.Status},
-		Review:        reviewResult(eval),
-		Approval:      ApprovalResult{Current: eval.Approvals, Required: eval.RequiredApprovals},
-		FeedbackCount: len(eval.Feedback),
-	}
-}
-
-func NewFeedbackResult(eval plan.Evaluation) FeedbackResult {
+func NewOutcomeResult(eval plan.Evaluation) OutcomeResult {
 	items := make([]FeedbackItem, len(eval.Feedback))
 	for i, f := range eval.Feedback {
 		items[i] = FeedbackItem{ID: f.ID, Author: f.Author, Body: f.Body, Path: f.Path, Line: f.Line}
 	}
-	return FeedbackResult{Version: Version, Plan: eval.Plan, Status: eval.Status, Review: reviewResult(eval), Feedback: items}
-}
-
-func NewContextResult(eval plan.Evaluation) ContextResult {
 	reasons := eval.BlockedReasons
 	if reasons == nil {
 		reasons = []string{}
 	}
-	return ContextResult{
-		Version: Version,
-		Plan: ContextPlanResult{
-			ID: eval.Plan.ID, Title: eval.Plan.Title, Path: eval.Plan.Path, Status: eval.Status,
-			WorkspacePath: eval.Plan.WorkspacePath, AbsolutePath: eval.Plan.AbsolutePath,
-		},
-		Repositories: RepositoriesResult{Implementation: eval.Repository, Plans: eval.PlansRepository},
-		Review:       reviewResult(eval),
-		Implementation: ImplementationResult{
-			Allowed: eval.Allowed, Base: eval.Plan.Base, BlockedReasons: reasons,
-		},
+	reviewers := eval.Reviewers
+	if reviewers == nil {
+		reviewers = []string{}
+	}
+	return OutcomeResult{
+		Version: Version, Plan: planResult(eval.Plan, eval.Status), Review: reviewResult(eval),
+		Status: eval.Status, Approval: ApprovalResult{Current: eval.Approvals, Required: eval.RequiredApprovals},
+		Reviewers: reviewers, Feedback: items, Allowed: eval.Allowed, BlockedReasons: reasons,
 	}
 }
 
@@ -238,87 +164,29 @@ func (r Renderer) Init(result InitResult) error {
 	return err
 }
 
-func (r Renderer) Create(result CreateResult) error {
-	if r.JSON {
-		return writeJSON(r.Stdout, result)
-	}
-	_, err := fmt.Fprintf(r.Stdout, "Created plan: %s\nPlan file: %s\nBranch: %s\n", result.Plan.Title, result.Plan.AbsolutePath, result.Plan.Branch)
-	return err
-}
-
-func (r Renderer) Publish(result PublishResult) error {
-	if r.JSON {
-		return writeJSON(r.Stdout, result)
-	}
-	_, err := fmt.Fprintf(r.Stdout, "Published plan: %s\nReview: %s\nBranch: %s\nCommit: %s\n",
-		result.Plan.Title, result.Review.URL, result.Plan.Branch, result.Commit)
-	return err
-}
-
-func statusLabel(status plan.Status) string {
-	labels := map[plan.Status]string{
-		plan.StatusDraft: "Draft", plan.StatusInReview: "In review",
-		plan.StatusChangesRequested: "Changes requested", plan.StatusApproved: "Approved",
-		plan.StatusClosed: "Closed", plan.StatusMerged: "Merged",
-	}
-	return labels[status]
-}
-
-func (r Renderer) Status(result StatusResult) error {
+func (r Renderer) Outcome(result OutcomeResult) error {
 	if r.JSON {
 		return writeJSON(r.Stdout, result)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n", result.Plan.ID)
+	fmt.Fprintf(&b, "%s\n\nFiles    %s\nStatus   %s\n", result.Plan.Title, strings.Join(result.Plan.Files, ", "), statusLabel(result.Status))
 	if result.Review != nil {
-		fmt.Fprintf(&b, "Provider    %s\nReview      #%s\n", result.Review.Provider, result.Review.ID)
+		fmt.Fprintf(&b, "Review   %s\n", result.Review.URL)
 	}
-	fmt.Fprintf(&b, "Status      %s\n", statusLabel(result.Plan.Status))
-	if result.Review != nil {
-		fmt.Fprintf(&b, "Approvals   %d / %d\n", result.Approval.Current, result.Approval.Required)
-		fmt.Fprintf(&b, "Feedback    %d\n", result.FeedbackCount)
-	}
-	_, err := fmt.Fprint(r.Stdout, b.String())
-	return err
-}
-
-func (r Renderer) Feedback(result FeedbackResult) error {
-	if r.JSON {
-		return writeJSON(r.Stdout, result)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", result.Plan.Title)
-	if result.Review != nil {
-		fmt.Fprintf(&b, "%s #%s\n", result.Review.Provider, result.Review.ID)
-	}
-	fmt.Fprintf(&b, "\n%s\n", strings.ToUpper(statusLabel(result.Status)))
-	for _, item := range result.Feedback {
-		fmt.Fprintf(&b, "\n%s", item.Author)
-		if item.Path != "" {
-			fmt.Fprintf(&b, " — %s", item.Path)
-			if item.Line != nil {
-				fmt.Fprintf(&b, ":%d", *item.Line)
-			}
-		}
-		fmt.Fprintf(&b, "\n\n  %s\n", item.Body)
-	}
-	_, err := fmt.Fprint(r.Stdout, b.String())
-	return err
-}
-
-func (r Renderer) Context(result ContextResult) error {
-	if r.JSON {
-		return writeJSON(r.Stdout, result)
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\nPlan file    %s\nStatus       %s\n", result.Plan.Title, result.Plan.AbsolutePath, statusLabel(result.Plan.Status))
-	if result.Review != nil {
-		fmt.Fprintf(&b, "Review       %s\n", result.Review.URL)
-	}
-	if result.Implementation.Allowed {
-		fmt.Fprintf(&b, "Implementation allowed on base %s\n", result.Implementation.Base)
+	fmt.Fprintf(&b, "Approvals %d / %d\n", result.Approval.Current, result.Approval.Required)
+	if result.Allowed {
+		fmt.Fprintf(&b, "Approved on base %s\n", result.Plan.Base)
 	} else {
-		fmt.Fprintf(&b, "Implementation blocked: %s\n", strings.Join(result.Implementation.BlockedReasons, ", "))
+		for _, item := range result.Feedback {
+			fmt.Fprintf(&b, "\n%s", item.Author)
+			if item.Path != "" {
+				fmt.Fprintf(&b, " — %s", item.Path)
+				if item.Line != nil {
+					fmt.Fprintf(&b, ":%d", *item.Line)
+				}
+			}
+			fmt.Fprintf(&b, "\n\n  %s\n", item.Body)
+		}
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err
@@ -336,22 +204,25 @@ func (r Renderer) Skills(result SkillsResult) error {
 	return err
 }
 
-func (r Renderer) Complete(result CompleteResult) error {
+func (r Renderer) Uninstall(result UninstallResult) error {
 	if r.JSON {
 		return writeJSON(r.Stdout, result)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Completed plan: %s\nRetention: %s\nReview: %s\n", result.Plan.Title, result.Retention, result.Review.URL)
-	if result.PrunedRemote {
-		fmt.Fprintf(&b, "Remote branch: pruned\n")
-	}
-	if result.WorkspaceRemoved {
-		fmt.Fprintf(&b, "Worktree: removed\n")
-	} else {
-		fmt.Fprintf(&b, "Worktree: kept (has local work)\n")
+	for _, removed := range result.Removed {
+		fmt.Fprintf(&b, "Removed /planctl for %s at %s\n", removed.Agent, removed.Path)
 	}
 	_, err := fmt.Fprint(r.Stdout, b.String())
 	return err
+}
+
+func statusLabel(status plan.Status) string {
+	labels := map[plan.Status]string{
+		plan.StatusDraft: "Draft", plan.StatusInReview: "In review",
+		plan.StatusChangesRequested: "Changes requested", plan.StatusApproved: "Approved",
+		plan.StatusClosed: "Closed", plan.StatusMerged: "Merged",
+	}
+	return labels[status]
 }
 
 func writeJSON(w io.Writer, result any) error {

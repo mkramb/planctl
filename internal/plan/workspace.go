@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mkramb/planctl/internal/config"
 	"github.com/mkramb/planctl/internal/git"
 )
 
@@ -42,62 +41,118 @@ func (s Service) workspaceRoot(ctx context.Context, client *git.Client) (string,
 	return filepath.Join(cache, "planctl", "worktrees", fmt.Sprintf("%s-%x", name, key[:6])), nil
 }
 
-// A newly created plan worktree may not contain .planctl.yaml yet (init does not
-// commit it). Recover its configuration from sibling Git worktrees, not a local
-// state file. Restrict this fallback to our deterministic managed workspaces.
-func (s Service) loadConfiguration(ctx context.Context, dir, override string) (config.Loaded, error) {
-	loader := config.Loader{Executor: s.Executor, Env: s.Env}
-	loaded, originalErr := loader.Load(ctx, dir, override)
-	var configErr *config.Error
-	if originalErr == nil || override != "" || !errors.As(originalErr, &configErr) || configErr.Code != "config_not_found" {
-		return loaded, originalErr
-	}
-	client := git.New(s.Executor, dir, s.Env)
-	root, err := client.Root(ctx)
+// prepareWorktree creates or reuses the isolated review worktree at the base
+// commit. Reuse preserves prior published history so republish updates the same
+// review.
+func (s Service) prepareWorktree(ctx context.Context, source *git.Client, p Plan, baseCommit string) error {
+	worktrees, err := source.Worktrees(ctx)
 	if err != nil {
-		return config.Loaded{}, err
+		return err
 	}
-	managedRoot, err := s.workspaceRoot(ctx, client)
+	for _, worktree := range worktrees {
+		if worktree.Branch != p.Branch && filepath.Clean(worktree.Path) != p.WorkspacePath {
+			continue
+		}
+		if filepath.Clean(worktree.Path) != p.WorkspacePath || worktree.Branch != p.Branch {
+			return &Error{Code: "workspace_conflict", Message: fmt.Sprintf("review branch or workspace is already in use at %s", worktree.Path)}
+		}
+		if worktree.Prunable {
+			return &Error{Code: "workspace_missing", Message: "Git still registers a missing review worktree; repair or remove that registration before retrying"}
+		}
+		return s.verifyWorktree(ctx, source, p)
+	}
+	if _, err := os.Lstat(p.WorkspacePath); err == nil {
+		return &Error{Code: "workspace_conflict", Message: fmt.Sprintf("workspace path already exists outside Git's worktree registry: %s", p.WorkspacePath)}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	_, exists, err := source.ResolveCommit(ctx, "refs/heads/"+p.Branch)
 	if err != nil {
-		return config.Loaded{}, err
+		return err
 	}
-	if filepath.Dir(root) != managedRoot {
-		return config.Loaded{}, originalErr
+	if err := source.AddWorktree(ctx, p.WorkspacePath, p.Branch, baseCommit, !exists); err != nil {
+		return fmt.Errorf("create review worktree: %w", err)
+	}
+	return s.verifyWorktree(ctx, source, p)
+}
+
+func (s Service) verifyWorktree(ctx context.Context, source *git.Client, p Plan) error {
+	info, err := os.Lstat(p.WorkspacePath)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return &Error{Code: "workspace_conflict", Message: "managed workspace must be a directory, not a symlink"}
+	}
+	client := git.New(s.Executor, p.WorkspacePath, s.Env)
+	common, err := client.CommonDirectory(ctx)
+	if err != nil {
+		return err
+	}
+	want, err := source.CommonDirectory(ctx)
+	if err != nil {
+		return err
 	}
 	branch, err := client.CurrentBranch(ctx)
 	if err != nil {
-		return config.Loaded{}, err
+		return err
 	}
-	worktrees, err := client.Worktrees(ctx)
-	if err != nil {
-		return config.Loaded{}, err
+	if common != want || branch != p.Branch {
+		return &Error{Code: "workspace_conflict", Message: "managed workspace belongs to a different repository or branch"}
 	}
-	var selected *config.Loaded
-	for _, worktree := range worktrees {
-		if worktree.Prunable || worktree.Bare || inside(managedRoot, worktree.Path) {
-			continue
-		}
-		candidate, err := loader.Load(ctx, worktree.Path, "")
-		if errors.As(err, &configErr) && configErr.Code == "config_not_found" {
+	return nil
+}
+
+// syncFiles copies the selected files' current content into the worktree,
+// removes files published earlier but no longer selected, and stages the result.
+func (s Service) syncFiles(ctx context.Context, workspacePath, sourceRoot string, files []string, baseCommit string) error {
+	ws := git.New(s.Executor, workspacePath, s.Env)
+	for _, rel := range files {
+		src := filepath.Join(sourceRoot, filepath.FromSlash(rel))
+		dst := filepath.Join(workspacePath, filepath.FromSlash(rel))
+		info, err := os.Stat(src)
+		if errors.Is(err, os.ErrNotExist) {
+			if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 			continue
 		}
 		if err != nil {
-			return config.Loaded{}, err
+			return err
 		}
-		if strings.ReplaceAll(candidate.Config.Branch.Pattern, "{slug}", filepath.Base(root)) != branch {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		if err := makeDirectories(filepath.Dir(dst)); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, data, info.Mode().Perm()); err != nil {
+			return err
+		}
+	}
+	head, _, err := ws.ResolveCommit(ctx, "HEAD")
+	if err != nil {
+		return err
+	}
+	changed, err := ws.ChangedFiles(ctx, baseCommit, head)
+	if err != nil {
+		return err
+	}
+	selected := make(map[string]bool, len(files))
+	for _, rel := range files {
+		selected[rel] = true
+	}
+	for _, rel := range changed {
+		if selected[rel] {
 			continue
 		}
-		if selected != nil && selected.Config != candidate.Config {
-			return config.Loaded{}, &Error{Code: "ambiguous_config", Message: "related worktrees have different configuration; pass --config explicitly"}
-		}
-		if selected == nil {
-			selected = &candidate
+		if err := os.Remove(filepath.Join(workspacePath, filepath.FromSlash(rel))); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
-	if selected == nil {
-		return config.Loaded{}, originalErr
-	}
-	return *selected, nil
+	_, err = ws.Run(ctx, "add", "-A")
+	return err
 }
 
 func inside(root, path string) bool {
@@ -127,7 +182,6 @@ func canonicalFuturePath(path string) (string, error) {
 }
 
 // Refuse symlinks in managed paths, even when their targets happen to exist.
-// This also keeps a tracked symlink in the plan directory from redirecting writes.
 func makeDirectories(path string) error {
 	info, err := os.Lstat(path)
 	if err == nil {
@@ -155,20 +209,16 @@ func makeDirectories(path string) error {
 	return nil
 }
 
-func writePlan(p Plan) error {
-	if !inside(p.WorkspacePath, p.AbsolutePath) {
-		return &Error{Code: "unsafe_path", Message: "plan path escapes its workspace"}
-	}
-	if err := makeDirectories(filepath.Dir(p.AbsolutePath)); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(p.AbsolutePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return &Error{Code: "plan_exists", Message: fmt.Sprintf("plan already exists at %s; choose another title or edit the existing plan", p.AbsolutePath)}
+// cacheDir returns the injectable cache directory or the user cache, resolving
+// symlinks (macOS /var -> /private/var) so path traversal never touches one.
+func (s Service) cacheDir() (string, error) {
+	cache := s.CacheDir
+	if cache == "" {
+		var err error
+		cache, err = os.UserCacheDir()
+		if err != nil {
+			return "", err
 		}
-		return err
 	}
-	_, writeErr := file.WriteString(template(p.Title))
-	return errors.Join(writeErr, file.Close())
+	return canonicalFuturePath(cache)
 }

@@ -1,4 +1,5 @@
 version: 1
-
-plan:
-  retention: pr-only
+branch:
+  pattern: "plan/{slug}"
+pull_request:
+  title: "Plan: {title}"

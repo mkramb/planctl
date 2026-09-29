@@ -12,20 +12,20 @@ run = "go fmt ./..."
 
 [tasks.vet]
 description = "Run Go static analysis"
-run = "go vet ./..."
+run = "go vet -tags integration ./..."
 
 [tasks.lint]
 description = "Run golangci-lint"
-run = "golangci-lint run"
+run = "golangci-lint run --build-tags integration"
 
 [tasks.validate]
 description = "Format, vet, and lint"
 depends = ["fmt", "vet", "lint"]
 
 [tasks.test]
-description = "Run all offline tests (requires Git)"
+description = "Run unit tests"
 run = "go test ./..."
 
 [tasks.test-integration]
-description = "Run CLI integration tests with real Git"
-run = "go test ./test/integration/..."
+description = "Run integration tests (real Git + in-memory GitHub; live gh tests skip without PLANCTL_GH_TEST_REPO)"
+run = "go test -tags integration ./..."
