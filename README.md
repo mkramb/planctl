@@ -1,93 +1,139 @@
 # planctl
 
-A local, review-platform-native workflow for reviewing and approving coding-agent
-implementation plans before implementation begins.
+`planctl` reviews coding-agent implementation plans as GitHub pull requests,
+before any code is written.
 
-Git provides history. GitHub provides collaboration. `planctl` connects them.
+A coding agent writes a Markdown plan, `planctl` opens a GitHub pull request for
+it, your team reviews and approves it on GitHub, and only then does the agent
+start implementing. GitHub provides the review experience; `planctl` provides
+the plan lifecycle.
 
-## Development status
+**planctl uses GitHub only.** An internal interface lets the test suite swap in
+a fake for GitHub so tests run fast and offline; that interface is a testing
+seam, not a plugin system.
 
-V1 is being built incrementally. All lifecycle commands are implemented:
-`init`, `create`, `publish`, `status`, `feedback`, `context`, and `complete`,
-including dedicated plans repositories. The GitHub adapter is wired and covered
-by fixture tests; it has not yet been exercised against live GitHub. Agent
-skills are next.
+## Example session
 
-See [architecture](docs/architecture.md) for design decisions.
+A developer asks their coding agent to add single sign-on.
 
-## Usage
+1. The agent turns the request into a plan:
+
+   ```sh
+   planctl init
+   planctl create "Add SSO" --json
+   ```
+
+   The `create` output includes `plan.absolute_path`. The agent writes the
+   Markdown (and any Mermaid diagrams) there and does not touch implementation
+   code yet.
+
+2. The agent publishes the plan for review:
+
+   ```sh
+   planctl publish --json
+   ```
+
+   This commits the plan, pushes a `plan/add-sso` branch, and opens a
+   ready-for-review GitHub pull request.
+
+3. The team reviews on GitHub: inline comments, review threads, "request
+   changes", and approvals.
+
+4. When asked to continue, the agent checks the review:
+
+   ```sh
+   planctl context --json
+   ```
+
+   The response reports `implementation.allowed` and, when blocked, the
+   `blocked_reasons`.
+
+5. If changes were requested, the agent reads them and revises:
+
+   ```sh
+   planctl feedback --json
+   # edit plan.absolute_path to address the comments
+   planctl publish --json   # updates the same pull request
+   ```
+
+6. Once the team approves the current revision:
+
+   ```sh
+   planctl context --json   # implementation.allowed == true
+   ```
+
+7. The agent implements the change in the normal repository checkout.
+
+8. After implementation, the agent finishes the plan:
+
+   ```sh
+   planctl complete --json
+   ```
+
+   `pr-only` retention closes the pull request without merging; `repository`
+   retention merges the plan into the base branch.
+
+The core rule: **do not start implementing until `implementation.allowed` is
+`true`.** Reviewers, approvals, and change requests all happen on GitHub;
+`planctl` reads them and enforces the gate.
+
+## Install
+
+`planctl` is a single Go binary. It drives your installed `git` and GitHub CLI
+(`gh`); authenticate `gh` before publishing.
 
 ```sh
-planctl init
-planctl create "Add SSO" --json     # edit the returned plan.absolute_path
-planctl publish --json               # open or update the review
-planctl feedback --json              # read review feedback
-planctl publish --json               # revise and republish
-planctl context --json               # check implementation.allowed
-planctl complete --json              # close (pr-only) or merge (repository)
+go install github.com/mkramb/planctl/cmd/planctl@latest
 ```
 
-A plan is reviewed as a GitHub pull request. Implementation should not start
-until `context --json` reports `implementation.allowed == true`. Reviewers,
-approvals, and change requests all happen on GitHub; `planctl` reads them.
-
-Install the built-in agent skills:
+Or build from source with [mise](https://mise.jdx.dev/):
 
 ```sh
-planctl skills install                  # claude + opencode
+mise install
+mise run build   # produces bin/planctl
+```
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `planctl init` | Create `.planctl.yaml` in the current repository |
+| `planctl create "<title>"` | Create a plan in its own Git worktree |
+| `planctl publish` | Commit, push, and open/update the review PR |
+| `planctl status` | Show review status and approvals |
+| `planctl feedback` | List review comments |
+| `planctl context` | Report whether implementation is allowed |
+| `planctl complete` | Close (pr-only) or merge (repository) the review |
+| `planctl skills install` | Install the agent skill |
+
+Every command supports `--json` for agents and plain text for humans. See
+[architecture](docs/architecture.md), [configuration](docs/configuration.md),
+and [publishing](docs/publishing.md) for details.
+
+## Agent skills
+
+```sh
+planctl skills install                  # Claude Code + OpenCode
 planctl skills install --agent claude   # Claude Code only
 ```
 
-Skills for [Claude Code](skills/claude-code/SKILL.md) and
-[OpenCode](skills/opencode/SKILL.md) automate this workflow.
-
-## Initialize a repository
-
-From an existing Git repository or one of its subdirectories:
-
-```sh
-planctl init
-```
-
-This creates `.planctl.yaml` at the worktree root. It does not overwrite an
-existing file or change Git history. See [configuration](docs/configuration.md)
-for defaults and `--config`.
-
-## Create a plan
-
-```sh
-planctl create "Add SSO" --json
-```
-
-Edit the returned `plan.absolute_path`. The Markdown template lives in a separate
-Git worktree; your current branch and files stay untouched. Creation works from
-an existing worktree too. It creates a local plan branch but does not commit or
-push. Repeating the same title reports the existing plan without overwriting it.
-
-## Publishing (under development)
-
-The publish workflow commits only the selected plan, pushes its branch, and
-creates or reuses one review. See [publishing](docs/publishing.md) for selection
-and retry behavior. The standalone binary currently reports `provider_unavailable`
-without changing Git; real GitHub publishing arrives with the GitHub adapter.
+The built-in skills ([Claude Code](skills/claude-code/SKILL.md),
+[OpenCode](skills/opencode/SKILL.md)) automate the workflow above.
 
 ## Development
 
-Install [mise](https://mise.jdx.dev/) and Git, then run from this directory:
+Install [mise](https://mise.jdx.dev/) and Git, then from this directory:
 
 ```sh
 mise install
 mise run build
 ./bin/planctl --help
-mise run test
-mise run vet
+mise run validate   # fmt + vet + lint
+mise run test       # all tests
 ```
 
-The Go toolchain and dependencies must be installed before testing offline.
-Tests themselves use temporary local Git repositories and local bare remotes;
-they require neither GitHub nor `gh` nor network access.
-
-See [development](docs/development.md) for test architecture and commands.
+Tests use temporary Git repositories and a fake GitHub adapter, so they run
+offline without `gh` or network access. See [development](docs/development.md).
 
 ## License
 

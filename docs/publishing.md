@@ -1,12 +1,11 @@
 # Publishing
 
-The workflow currently runs through the integration-test provider. The standalone
-binary will support it when the GitHub adapter is added.
-
 ```sh
 planctl publish --json
 planctl publish --plan add-sso --json
 ```
+
+Publishing drives GitHub through the locally installed `gh` CLI.
 
 ## Plan selection
 
@@ -41,7 +40,7 @@ and implementation repository. Republish preserves the description and feedback.
 
 ## Review lifecycle
 
-`status`, `feedback`, and `context` read the review through the provider:
+`status`, `feedback`, and `context` read the review from GitHub:
 
 - `status` shows the lifecycle state: `draft`, `in_review`, `changes_requested`,
   `approved`, `closed`, or `merged`, plus approvals and feedback count.

@@ -1,5 +1,5 @@
 // Package github translates between GitHub (via the gh CLI) and planctl's
-// provider-neutral review model. It is the only package that knows GitHub shapes.
+// review model. It is the only package that knows GitHub's shapes.
 package github
 
 type prView struct {

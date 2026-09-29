@@ -28,7 +28,7 @@ Integration tests are the main tests. Each one:
 
 1. Creates a temp directory with a real Git repo and a local bare remote.
 2. Runs real CLI commands through the Cobra tree.
-3. Uses a stateful fake review provider instead of GitHub.
+3. Uses a stateful fake that stands in for GitHub.
 
 Managed plan worktrees and locks use each test's temporary cache directory.
 Worktree tests check that staged files, local edits, and feature commits stay out

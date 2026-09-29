@@ -47,6 +47,9 @@ pull_request:
   title: "Plan: {title}"
 ```
 
+`review.provider` is always `github` — planctl supports GitHub only. The field is
+configurable solely so it can be made explicit; any other value is an error.
+
 `create` stays offline. With no `branch.base`, it uses the cached `origin/HEAD`,
 or the sole available `main`/`master` branch. If the choice is unclear, set
 `branch.base` explicitly. A cached `origin/<base>` takes priority over the local
@@ -78,7 +81,8 @@ is recorded in review metadata. Run commands from the implementation checkout;
 `planctl` manages the plans clone automatically.
 - `retention` accepts `pr-only` or `repository`.
 - `directory` must stay inside the repository, outside `.git`.
-- Unknown fields and unsupported versions/providers are errors.
+- Unknown fields, unsupported versions, and any `review.provider` other than
+  `github` are errors.
 - Configuration holds settings, not review IDs or current plan status.
 
 `init`, same-repository `create`, and dedicated plans repositories are available.

@@ -116,7 +116,7 @@ func (c Config) validate() error {
 		return &Error{Code: "unsupported_config_version", Message: fmt.Sprintf("unsupported configuration version %d; set version: 1", c.Version)}
 	}
 	if c.Review.Provider != "github" {
-		return &Error{Code: "unsupported_review_provider", Message: fmt.Sprintf("unsupported review provider %q; planctl currently supports github", c.Review.Provider)}
+		return &Error{Code: "unsupported_review_provider", Message: fmt.Sprintf("unsupported review provider %q; planctl supports GitHub only", c.Review.Provider)}
 	}
 	invalid := func(message string) error { return &Error{Code: "invalid_config", Message: message} }
 	if c.Review.RequiredApprovals < 1 {

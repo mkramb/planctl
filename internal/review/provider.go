@@ -1,4 +1,6 @@
-// Package review defines provider-neutral review data and operations.
+// Package review defines the review data model and the Provider interface.
+// planctl supports GitHub only; the interface exists so tests can substitute an
+// in-memory fake for the GitHub adapter. It is a testing seam, not a plugin API.
 package review
 
 import (
@@ -81,7 +83,8 @@ type FindRequest struct {
 	HeadBranch string
 }
 
-// Provider is deliberately small. Completion operations will be added when used.
+// Provider is the seam between planctl and GitHub. Only the GitHub adapter
+// implements it in production; tests provide an in-memory fake.
 type Provider interface {
 	ResolveRepository(context.Context, string) (string, error)
 	// ResolvePlansRepository maps a configured plans repository name to a clone

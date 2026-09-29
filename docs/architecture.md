@@ -26,8 +26,12 @@
                   +---------+   +--------+
 ```
 
-Git and the review provider hold the state. `.planctl.yaml` holds only config.
+Git and GitHub hold the state. `.planctl.yaml` holds only config.
 There is no local database or server.
+
+`ReviewProvider` in the diagram is a testing seam, not a plugin system: the
+production implementation is GitHub, and the "mock" branch is an in-memory fake
+that lets integration tests run offline.
 
 ## Packages
 
@@ -40,15 +44,16 @@ The flow is: Cobra command -> operation -> Git / ReviewProvider -> typed result
 - `internal/plan` - plan identity, templates, and managed worktrees.
 - `internal/process` - runs external programs; the only place that execs.
 - `internal/git` - the user's real `git`.
-- `internal/review` - provider-neutral review types and interface.
+- `internal/review` - review types and the `Provider` interface (a test seam).
 - `internal/output` - shared results rendered as text or JSON.
-- `internal/github` - GitHub details and `gh` calls (to be built).
+- `internal/github` - GitHub details and `gh` calls.
 
 ## Rules
 
-- GitHub is the only production provider in V1. No plugin framework.
+- planctl supports GitHub only. The `Provider` interface exists so tests can use
+  a fake; it is not a plugin system.
 - GitHub-specific code stays in `internal/github`.
-- Everything is reproducible from config + Git + the review provider.
+- Everything is reproducible from config + Git + GitHub.
 
 ## Plan workflow
 
